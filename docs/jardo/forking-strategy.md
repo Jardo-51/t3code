@@ -15,6 +15,7 @@ file at this path, so it never causes a merge conflict.
 | `feature/*` | Upstreamable work. Branched from `main`. | Must not depend on custom code. |
 | `custom/*` | Fork-only work. Branched from `custom/main`. | Free to depend on other custom changes. |
 | `custom/upstream-pr-*` | Unmerged upstream PRs adopted early. Branched from `custom/main`. | Third-party code — read the diff first. |
+| `vendor/pr-*` | Raw upstream PR heads, fetched verbatim. | Never merged directly; only cherry-picked from. |
 
 The two classes of feature branch matter. A branch cut from `main` cannot reference anything custom —
 if it does, it will not build for upstream. A branch that needs existing customizations must be cut
@@ -106,8 +107,9 @@ feature branch before submitting, or the entire fork gets proposed to upstream.
 
 ## The round-trip duplicate problem
 
-Upstream squash-merges — its history is one commit per PR (`fix(web): … (#4853)`). So when a feature
-goes to both places:
+Upstream squash-merges — since 2026-02-28 its history is one commit per PR (`fix(web): … (#4853)`).
+Only the repo's first three weeks contain real merge commits, so treat "one commit per PR" as true of
+everything the fork will ever sync. So when a feature goes to both places:
 
 1. `feature/x` merges into `custom/main` → its original commits become ancestors of `custom/main`.
 2. Upstream squashes `feature/x` into **one new commit with a different SHA**.
@@ -130,12 +132,18 @@ To tell duplicated commits from genuinely custom ones, `=` marks equivalent, `>`
 git log --cherry-mark --left-right --no-merges main...custom/main
 ```
 
+This only detects the single-commit case. Equivalence is decided by patch-id, so a fork-side feature
+that landed as three commits will never match upstream's one squashed commit — both sides show as
+unique and the duplicate goes unreported. Squashing `feature/*` when merging it into `custom/main`
+keeps the patch-ids comparable and is the cheap way to make this command mean something.
+
 ## Adopting unmerged upstream PRs
 
 Sometimes an open PR on `pingdotgg/t3code` — often from a third-party fork — has a fix worth having
 before upstream merges it. Adopt it into `custom/main` and then treat it like any other custom
-change: **never revert it**, and when upstream eventually lands its own version, resolve the merge
-conflict.
+change: **do not revert it to make a future sync easier**, and when upstream eventually lands its own
+version, resolve the merge conflict. One narrow exception is noted at the end of this section; it is
+an optimisation, never a requirement.
 
 That is the whole policy. There is no manifest to keep accurate, no pre-sync audit of PR states, and
 no ordering discipline. Syncing stays `git merge main`.
@@ -165,8 +173,14 @@ surface here rather than later:
 
 ```bash
 git switch -c custom/upstream-pr-5013-local-bin-path custom/main
-git cherry-pick "$(git merge-base main vendor/pr-5013)..vendor/pr-5013"
+git cherry-pick -x --no-merges "$(git merge-base main vendor/pr-5013)..vendor/pr-5013"
 ```
+
+Both flags earn their place. `--no-merges` is not optional: a PR that has been open a while usually
+has upstream merged into it, and without the flag the cherry-pick applies a few commits, then aborts
+on the first merge commit (`is a merge but no -m option was given`) leaving a half-applied sequencer
+state to clean up. `-x` records the original SHA in each message, which is what makes the adopted
+commits traceable back to the PR head later.
 
 Merge with `--no-ff` and put the PR number in the subject:
 
@@ -194,10 +208,13 @@ from that point on:
 
 ```bash
 git checkout --theirs path/to/file    # mid-merge, "theirs" is the main side
+git add path/to/file                  # --theirs does not stage
 ```
 
-Then re-apply any local adaptations as a separate commit. Blending hunk by hunk is where duplication
-bugs come from.
+`--theirs` only works on paths still marked as conflicted, and it takes upstream's *whole file* — any
+custom edits living in it are dropped too, including ones unrelated to the adopted PR. That is the
+intent, not an accident: re-apply the local adaptations as a separate commit afterwards. Blending
+hunk by hunk is where duplication bugs come from.
 
 If upstream closes the PR without merging and the change is still wanted, nothing needs doing — it is
 simply part of the fork now, maintained like any other custom change.
@@ -214,12 +231,16 @@ touched adopted code: build, run the tests, and grep for identifiers the PR intr
 
 ### Notes
 
-- **Depending on adopted code is fine.** Because nothing is ever reverted, a custom feature may build
-  on an adopted PR freely. This is the main reason the no-revert policy is worth its occasional
+- **Depending on adopted code is fine.** Adopted code stays put by default, so a custom feature may
+  build on an adopted PR freely. This is the main reason the no-revert default is worth its occasional
   conflicts.
-- **Reverting is still available as an optimisation.** If an adopted PR is self-contained and upstream
-  is known to have merged it, `git revert -m 1 <merge-sha>` before syncing is the cheaper path.
-  Nothing breaks when this is skipped, which is the point.
+- **The exception: reverting as a pre-sync optimisation.** If an adopted PR is self-contained, nothing
+  custom builds on it, and upstream is known to have already merged its version into `main`, then
+  `git revert -m 1 <merge-sha>` before syncing is the cheaper path — the conflict never materialises.
+  Skipping it costs one conflict resolution, which is why it stays optional rather than becoming
+  policy. Two things to know first: the revert leaves the adoption merge still "merged" as far as git
+  is concerned, so re-adopting that branch later means reverting the revert; and if the assumption
+  about upstream was wrong, the sync brings nothing back and the fix is silently gone.
 - **Never merge a `custom/upstream-pr-*` branch into a `feature/*` branch.** That would propose
   someone else's unmerged work to upstream as our own.
 - **Adopted code is unreviewed and runs with shell access.** T3 Code is an agent with access to the
