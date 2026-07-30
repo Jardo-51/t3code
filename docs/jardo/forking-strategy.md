@@ -12,20 +12,30 @@ file at this path, so it never causes a merge conflict.
 | --- | --- | --- |
 | `main` | Mirror of `upstream/main`. No custom work, ever. | Fast-forward only. Never commit here. |
 | `custom/main` | The fork's real trunk: upstream plus all custom changes. | Default branch on `origin`. Never force-pushed. |
-| `feature/*` | Upstreamable work. Branched from `main`. | Must not depend on custom code. |
-| `custom/*` | Fork-only work. Branched from `custom/main`. | Free to depend on other custom changes. |
+| `custom/feature/*` | Where all new work starts. Branched from `custom/main`. | Merged into `custom/main` only. |
+| `custom/*` | Other fork-only work. Branched from `custom/main`. | Free to depend on other custom changes. |
 | `custom/upstream-pr-*` | Unmerged upstream PRs adopted early. Branched from `custom/main`. | Third-party code — read the diff first. |
+| `feature/*` | A promotion branch: one `custom/feature/*` change replayed onto `main`. | Created at PR time. Must not depend on custom code. Never merged into `custom/main`. |
 | `vendor/pr-*` | Raw upstream PR heads, fetched verbatim. | Never merged directly; only cherry-picked from. |
 
-The two classes of feature branch matter. A branch cut from `main` cannot reference anything custom —
-if it does, it will not build for upstream. A branch that needs existing customizations must be cut
-from `custom/main` and can only ever be merged there.
+**All work starts on `custom/feature/*`, cut from `custom/main` — including work intended for
+upstream.** A `feature/*` branch is not where you develop; it is a branch created later, at the
+moment you open the upstream PR, holding the same change replayed onto `main`.
 
-If a `custom/*` branch later turns out to be upstreamable, cherry-pick it onto a fresh `feature/*`
-branch off `main` rather than retargeting it.
+The reason is that `feature/*` branches sit on a different base. Merging one into `custom/main` would
+also drag in every upstream commit between `custom/main`'s current base and that branch's tip — an
+unplanned partial upstream sync at an arbitrary point, skipping the deliberate merge in
+[Syncing upstream into `custom/main`](#syncing-upstream-into-custommain). So `feature/*` branches
+flow to upstream and nowhere else, and the fork's trunk only ever receives upstream through one door.
 
-Note: branch names like `custom/foo` coexist fine with `custom/main`, but a branch named plain
-`custom` can never exist alongside them.
+This defers a decision rather than removing it. A change that reaches into custom code still cannot
+be upstreamed, and the branch base no longer forces you to notice on day one — you find out when the
+cherry-pick onto `main` fails to build. When you already know a change is upstreamable, keep it free
+of custom dependencies from the first commit; the promotion is then mechanical.
+
+Note: nested names like `custom/foo` and `custom/feature/bar` coexist fine with `custom/main`, but a
+branch named plain `custom` — or plain `custom/feature` — can never exist alongside them, since git
+stores refs as paths and a file cannot also be a directory.
 
 ## One-time setup
 
@@ -70,34 +80,70 @@ git log --oneline --no-merges main..custom/main
 
 ## Starting a feature
 
-Sync first, so the branch is based on current upstream:
+Always from `custom/main`, whatever the change is for:
+
+```bash
+git switch custom/main
+git pull --ff-only origin custom/main   # other clones' work, not upstream
+git switch -c custom/feature/my-change
+```
+
+No upstream fetch is involved. Whether `custom/main` is current with upstream does not affect this
+branch — it only affects when the fork pays for the next upstream sync, which is the same cost
+whenever it happens. Merge it back the normal way:
+
+```bash
+git switch custom/main
+git merge --no-ff custom/feature/my-change
+```
+
+For anything headed upstream, collapse it to a single commit instead:
+
+```bash
+git merge --squash custom/feature/my-change && git commit
+```
+
+That keeps the fork's commit patch-identical to the one commit upstream will squash the PR into,
+which is what lets `--cherry-mark` recognise the round trip later. For fork-only work the merge
+commit is more useful, so `--no-ff` stays the default.
+
+## Promoting a feature upstream
+
+Do this when the PR is ready to open, not before. The promotion branch is cut from a freshly synced
+`main` and holds the same change replayed onto it:
 
 ```bash
 git fetch upstream
 git switch main && git merge --ff-only upstream/main && git push origin main
-git switch -c feature/my-change
+git switch -c feature/my-change main
+git cherry-pick -x custom/main..custom/feature/my-change
 ```
 
-Shortcut when the mirror branch does not need updating right now:
+That range is exactly the feature's own commits, since the branch was cut from `custom/main`. It
+works whether or not the feature has been merged into the trunk yet — if it has, use the squashed
+merge commit or the pre-merge branch tip instead.
 
-```bash
-git fetch upstream
-git switch -c feature/my-change upstream/main
-```
+Then build and test it *there*. This is the point where a hidden dependency on custom code shows up,
+and it is cheaper to find now than in upstream's review.
 
-What actually matters is being current when the PR is *opened*, not when the branch is created. If a
-branch has gone stale, rebase it rather than merging upstream into it:
+What matters is being current when the PR is *opened*, not when the branch was created. If the branch
+goes stale while under review, rebase it rather than merging upstream into it:
 
 ```bash
 git fetch upstream && git rebase upstream/main
 ```
 
-Force-pushing a `feature/*` branch is fine — it only lives in this fork. Be more careful once
+Force-pushing a `feature/*` branch is fine — nothing in the fork builds on it. Be more careful once
 upstream reviewers have left inline comments, since a rebase can detach them from their lines.
+
+If review changes the PR, do not merge `feature/*` back into `custom/main` to collect the
+improvements — that would drag upstream's commits in with them. Let the change return through the
+normal sync, or cherry-pick the individual review commits onto a fresh `custom/feature/*` branch.
 
 ## Opening pull requests
 
-**Into the fork:** `feature/*` or `custom/*` → `custom/main` on `Jardo-51/t3code`.
+**Into the fork:** `custom/*` (including `custom/feature/*`) → `custom/main` on `Jardo-51/t3code`.
+Never `feature/*`.
 
 **Into upstream:** `feature/*` → `main` on `pingdotgg/t3code`.
 
@@ -111,8 +157,9 @@ Upstream squash-merges — since 2026-02-28 its history is one commit per PR (`f
 Only the repo's first three weeks contain real merge commits, so treat "one commit per PR" as true of
 everything the fork will ever sync. So when a feature goes to both places:
 
-1. `feature/x` merges into `custom/main` → its original commits become ancestors of `custom/main`.
-2. Upstream squashes `feature/x` into **one new commit with a different SHA**.
+1. `custom/feature/x` merges into `custom/main` → its commits become ancestors of `custom/main`.
+2. The promotion branch `feature/x` carries the same change upstream, which squashes it into **one new
+   commit with a different SHA**.
 3. The next upstream sync brings in a commit git cannot recognise as equivalent.
 
 Step 3 is less alarming than it sounds. Where both sides made the *same* change relative to the merge
@@ -121,8 +168,11 @@ size tracks how much review changed the PR, not how big the PR was.
 
 Mitigations, in order of value:
 
-- **Wait for upstream to merge before merging into `custom/main`**, when the delay is tolerable. The
-  change then arrives for free through the normal sync with nothing to reconcile.
+- **Wait for upstream to merge before merging into `custom/main`**, when the delay is tolerable. Leave
+  the work sitting on its `custom/feature/*` branch, promote it, and if upstream takes it the change
+  arrives for free through the normal sync with nothing to reconcile — the fork-side branch is then
+  thrown away unmerged. Promotion only needs the `custom/feature/*` branch, not a merge into the
+  trunk.
 - If it is needed sooner, resolve the eventual conflict toward upstream's version and let `rerere`
   remember the resolution.
 
@@ -134,8 +184,8 @@ git log --cherry-mark --left-right --no-merges main...custom/main
 
 This only detects the single-commit case. Equivalence is decided by patch-id, so a fork-side feature
 that landed as three commits will never match upstream's one squashed commit — both sides show as
-unique and the duplicate goes unreported. Squashing `feature/*` when merging it into `custom/main`
-keeps the patch-ids comparable and is the cheap way to make this command mean something.
+unique and the duplicate goes unreported. Squashing `custom/feature/*` when merging it into
+`custom/main` keeps the patch-ids comparable and is the cheap way to make this command mean something.
 
 ## Adopting unmerged upstream PRs
 
@@ -260,5 +310,7 @@ touched adopted code: build, run the tests, and grep for identifiers the PR intr
   their own identity, inject it at build time or use a separate marker file upstream does not have.
 - **Prefer additive files over edits to shared code.** Every line changed in a file upstream also
   touches is a recurring cost. Small hook-points beat changes scattered through common modules.
-- **Keep upstreamable work separate from fork-only work** from the first commit. Untangling them
-  later is far more expensive than deciding the branch base up front.
+- **Keep upstreamable work separate from fork-only work** from the first commit — one
+  `custom/feature/*` branch per concern, and no custom dependencies in the ones headed upstream.
+  Every branch now starts from the same base, so nothing forces this on you; untangling a mixed
+  branch at promotion time is far more expensive than keeping it clean while writing it.
