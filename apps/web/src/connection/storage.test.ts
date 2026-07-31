@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { afterEach, vi } from "vite-plus/test";
 
-import { makeCatalogBackend, makeCatalogStore } from "./storage";
+import { makeCatalogBackend, makeCatalogStore, openDatabase } from "./storage";
 
 const emptyCatalog = {
   schemaVersion: 1,
@@ -72,6 +72,25 @@ describe("makeCatalogBackend", () => {
       expect(error).toBeInstanceOf(ConnectionTransientError);
       expect(error.message).toContain("Desktop secure storage is unavailable");
       expect(setConnectionCatalog).toHaveBeenCalledWith("{}");
+    }),
+  );
+});
+
+describe("openDatabase", () => {
+  it.effect("fails instead of hanging when another tab blocks the version change", () =>
+    Effect.gen(function* () {
+      const request = new EventTarget();
+      vi.stubGlobal("indexedDB", {
+        open: vi.fn(() => {
+          queueMicrotask(() => request.dispatchEvent(new Event("blocked")));
+          return request;
+        }),
+      });
+
+      const error = yield* openDatabase().pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(ConnectionTransientError);
+      expect(error.message).toContain("close the other T3 Code tabs");
     }),
   );
 });

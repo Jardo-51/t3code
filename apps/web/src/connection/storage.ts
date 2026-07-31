@@ -116,7 +116,7 @@ function persistenceError(
   });
 }
 
-const openDatabase = Effect.fn("web.connectionStorage.openDatabase")(function* () {
+export const openDatabase = Effect.fn("web.connectionStorage.openDatabase")(function* () {
   return yield* Effect.callback<IDBDatabase, ConnectionTransientError>((resume) => {
     if (typeof indexedDB === "undefined") {
       resume(
@@ -141,6 +141,20 @@ const openDatabase = Effect.fn("web.connectionStorage.openDatabase")(function* (
       if (!request.result.objectStoreNames.contains(VCS_REFS_STORE_NAME)) {
         request.result.createObjectStore(VCS_REFS_STORE_NAME);
       }
+    });
+    // `blocked` fires *instead of* `success`/`error` when another tab holds the
+    // database open and this open needs a version change. Without resuming here
+    // the request never settles, so the boot hangs on the splash screen with no
+    // error and no retry until every other tab is closed.
+    request.addEventListener("blocked", () => {
+      resume(
+        Effect.fail(
+          catalogError(
+            "open",
+            "another tab is using an older version of the local database — close the other T3 Code tabs and reload",
+          ),
+        ),
+      );
     });
     request.addEventListener("error", () => {
       resume(Effect.fail(catalogError("open", request.error ?? "Unknown IndexedDB error")));
