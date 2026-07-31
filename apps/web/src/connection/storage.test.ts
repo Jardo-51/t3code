@@ -93,4 +93,24 @@ describe("openDatabase", () => {
       expect(error.message).toContain("close the other T3 Code tabs");
     }),
   );
+
+  it.effect("closes the database when the blocked open later succeeds", () =>
+    Effect.gen(function* () {
+      const close = vi.fn();
+      const request = Object.assign(new EventTarget(), { result: { close } });
+      vi.stubGlobal("indexedDB", {
+        open: vi.fn(() => {
+          queueMicrotask(() => request.dispatchEvent(new Event("blocked")));
+          return request;
+        }),
+      });
+
+      yield* openDatabase().pipe(Effect.flip);
+      // The blocking tab closes and the request completes after we already
+      // failed; nothing will take ownership of the handle, so it must not leak.
+      request.dispatchEvent(new Event("success"));
+
+      expect(close).toHaveBeenCalledTimes(1);
+    }),
+  );
 });
