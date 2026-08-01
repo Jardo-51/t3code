@@ -20,6 +20,12 @@ import {
   syncDocumentWindowControlsOverlayClass,
 } from "./lib/windowControlsOverlay";
 import { AppRoot } from "./AppRoot";
+import { bootMark } from "./bootTrace";
+
+// First line of app code to run. Everything above is imports, so reaching this
+// point is what distinguishes "the module graph never loaded" from "the app
+// started and then stalled" — the two failures look identical on the splash.
+bootMark("module-eval");
 
 // Electron loads the app from a file-backed shell, so hash history avoids path resolution issues.
 const history = isElectron ? createHashHistory() : createBrowserHistory();
@@ -34,6 +40,8 @@ if (isElectron) {
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
 const app = <AppRoot router={router} />;
+
+bootMark("react-render");
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
