@@ -11,6 +11,7 @@ import {
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "../branding";
+import { bootMark } from "../bootTrace";
 import { resolveServerBackedAppDisplayName } from "../branding.logic";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
@@ -55,7 +56,10 @@ import {
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
+    bootMark("route-load-start");
+
     if (location.pathname === "/pair" && hasHostedPairingRequest(new URL(window.location.href))) {
+      bootMark("route-load-end");
       return {
         authGateState: {
           status: "hosted-pairing",
@@ -64,6 +68,7 @@ export const Route = createRootRoute({
     }
 
     if (isHostedStaticApp(new URL(window.location.href))) {
+      bootMark("route-load-end");
       return {
         authGateState: {
           status: "hosted-static",
@@ -71,7 +76,10 @@ export const Route = createRootRoute({
       };
     }
 
+    // Unbounded: the session request has no timeout, so a stall here holds the
+    // splash indefinitely. The surrounding marks are what make that visible.
     const authGateState = await resolveInitialServerAuthGateState();
+    bootMark("route-load-end");
     return {
       authGateState,
     };
@@ -96,6 +104,12 @@ function RootRouteView() {
       window.cancelAnimationFrame(frame);
     };
   }, [pathname]);
+
+  // First commit of the root route. Reaching this cancels the boot watchdog, so
+  // it has to sit above the early returns below to fire on every route.
+  useEffect(() => {
+    bootMark("app-rendered");
+  }, []);
 
   if (pathname === "/pair" || pathname === "/connect" || pathname.startsWith("/connect/")) {
     return (

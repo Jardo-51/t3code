@@ -23,5 +23,7 @@ interface ImportMeta {
 declare global {
   interface Window {
     desktopBridge?: DesktopBridge;
+    /** Installed by the inline boot tracer in `index.html`. See `src/bootTrace.ts`. */
+    __t3codeBootMark?: (stage: string) => void;
   }
 }
