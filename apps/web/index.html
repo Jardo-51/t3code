@@ -114,6 +114,19 @@
         const reached = (name) => attempt.marks.some((entry) => entry.stage === name);
 
         const diagnose = () => {
+          // `#root` lives in <body>. If it is gone while `html-parsed` was reached,
+          // the document response itself stopped arriving after <head>: <body> never
+          // parsed, so the page is blank rather than showing the splash and the
+          // module graph never got a chance. Blaming the modules here would point
+          // at the wrong layer.
+          if (reached("html-parsed") && !document.getElementById("root")) {
+            return {
+              stage: "document-truncated",
+              detail:
+                "The HTML document stopped arriving after <head>, so <body> never parsed — that is why the page is blank instead of showing the splash. The document request itself stalled, which points at the network path or the browser's HTTP cache rather than at the application.",
+            };
+          }
+
           const stalled = STAGES.find((stage) => !reached(stage.name));
           return stalled
             ? { stage: stalled.name, detail: stalled.detail }
@@ -121,32 +134,51 @@
         };
 
         const render = () => {
+          // A stalled document is the case this most needs to survive: if the
+          // response stops after <head> then <body>, and therefore `#root`, never
+          // exist. Bailing out when `#root` is missing would go silent at exactly
+          // the moment there is something worth saying, so fall back to whatever
+          // host does exist — `documentElement` is always there.
           const root = document.getElementById("root");
-          if (!root) {
+          const host = root ?? document.body ?? document.documentElement;
+          if (!host) {
             return;
           }
 
           const { stage, detail } = diagnose();
+          // Pinned and explicitly coloured rather than inheriting: when the host is
+          // `documentElement` there is no <body> to inherit from, and an overlay
+          // that renders invisibly is no better than one that never renders.
+          const dark = document.documentElement.classList.contains("dark");
           const panel = document.createElement("div");
           panel.setAttribute("role", "alert");
           panel.style.cssText =
-            "max-width:44rem;margin:0 auto;padding:2rem 1.5rem;font:14px/1.6 system-ui,sans-serif;color:inherit";
+            "position:fixed;inset:0;z-index:2147483647;overflow:auto;" +
+            "padding:2rem 1.5rem;font:14px/1.6 system-ui,sans-serif;" +
+            "background:" +
+            (dark ? "#161616" : "#ffffff") +
+            ";color:" +
+            (dark ? "#f5f5f5" : "#262626");
+
+          const content = document.createElement("div");
+          content.style.cssText = "max-width:44rem;margin:0 auto";
+          panel.append(content);
 
           const heading = document.createElement("h1");
           heading.textContent = "T3 Code did not finish starting";
           heading.style.cssText = "margin:0 0 .5rem;font-size:1.25rem;font-weight:600";
-          panel.append(heading);
+          content.append(heading);
 
           const summary = document.createElement("p");
           summary.textContent =
-            "Gave up after " + WATCHDOG_MS / 1000 + "s. First stage not reached: " + stage + ".";
+            "Gave up after " + WATCHDOG_MS / 1000 + "s. Diagnosis: " + stage + ".";
           summary.style.cssText = "margin:0 0 1rem;opacity:.75";
-          panel.append(summary);
+          content.append(summary);
 
           const explanation = document.createElement("p");
           explanation.textContent = detail;
           explanation.style.cssText = "margin:0 0 1.5rem";
-          panel.append(explanation);
+          content.append(explanation);
 
           const trace = document.createElement("pre");
           trace.textContent = attempt.marks
@@ -155,7 +187,7 @@
           trace.style.cssText =
             "margin:0 0 1.5rem;padding:.75rem 1rem;overflow-x:auto;border-radius:.5rem;" +
             "background:rgba(127,127,127,.12);font:12px/1.5 ui-monospace,monospace";
-          panel.append(trace);
+          content.append(trace);
 
           const actions = document.createElement("div");
           actions.style.cssText = "display:flex;gap:.5rem;flex-wrap:wrap";
@@ -190,8 +222,12 @@
             }),
           );
 
-          panel.append(actions);
-          root.replaceChildren(panel);
+          content.append(actions);
+          if (root) {
+            root.replaceChildren(panel);
+          } else {
+            host.append(panel);
+          }
         };
 
         window.__t3codeBootMark = mark;
