@@ -5,7 +5,8 @@
  * purpose, so that it still runs when the module graph never evaluates. Nothing
  * in the normal pipeline parses it — `vp lint` skips `.html` and the TypeScript
  * toolchain never sees it — so this harness extracts the block and executes it
- * against a stub DOM across the boot failures it is meant to report.
+ * against a stub DOM. It records only — no rendering — so these assert what ends
+ * up in the persisted trace.
  *
  * Run: node apps/web/scripts/verify-boot-diagnostics.mjs
  */
@@ -99,54 +100,27 @@ function run({ marks, hasRoot = true, hasBody = true, dispatch = [], domReady = 
   }
   timers.forEach((fire) => fire());
 
-  const host = root ?? body ?? documentElement;
-  const panel = host.children[0];
   const persisted = JSON.parse(store.get("t3code:boot-trace") ?? "[]");
-  return {
-    rendered: Boolean(panel),
-    summary: panel?.children?.[0]?.children?.[1]?.textContent ?? "",
-    trace: panel?.children?.[0]?.children?.[3]?.textContent ?? "",
-    persisted,
-    errors: persisted.at(-1)?.errors ?? [],
-  };
+  return { persisted, errors: persisted.at(-1)?.errors ?? [] };
 }
 
 const FULL = ["module-eval", "react-render", "route-load-start", "route-load-end", "app-rendered"];
 
 const cases = [
-  { label: "healthy boot renders no overlay", config: { marks: FULL }, expectOverlay: false },
   {
-    label: "module graph never evaluated",
-    config: { marks: [] },
-    expectOverlay: true,
-    expectDiagnosis: "module-eval",
+    label: "a healthy boot persists every stage in order",
+    config: { marks: FULL, domReady: true },
+    expectPersistedStages: ["html-parsed", "dom-ready", ...FULL],
   },
   {
-    label: "stalled in the root route's beforeLoad",
-    config: { marks: ["module-eval", "react-render", "route-load-start"] },
-    expectOverlay: true,
-    expectDiagnosis: "route-load-end",
+    label: "a graph that never evaluates persists only the pre-module marks",
+    config: { marks: [], domReady: true },
+    expectPersistedStages: ["html-parsed", "dom-ready"],
   },
   {
-    // Regression, observed 2026-08-01: the document stopped arriving after
-    // <head>, so <body> and `#root` never existed, and the overlay silently
-    // gave up at the one moment it had something worth reporting.
-    label: "document stalls after <head>: no <body>, no #root",
-    config: { marks: [], hasRoot: false, hasBody: false },
-    expectOverlay: true,
-    expectDiagnosis: "document-truncated",
-  },
-  {
-    label: "document stalls: <body> exists but #root does not",
-    config: { marks: [], hasRoot: false, hasBody: true },
-    expectOverlay: true,
-    expectDiagnosis: "document-truncated",
-  },
-  {
-    label: "every stage is persisted for later readback",
-    config: { marks: FULL },
-    expectOverlay: false,
-    expectPersistedStages: ["html-parsed", ...FULL],
+    label: "a document that never finishes parsing persists only html-parsed",
+    config: { marks: [], domReady: false },
+    expectPersistedStages: ["html-parsed"],
   },
   {
     // The case this exists for: the graph downloads intact, throws while
@@ -168,7 +142,6 @@ const cases = [
         },
       ],
     },
-    expectOverlay: true,
     expectErrors: [{ kind: "error", messageIncludes: "does not provide an export" }],
   },
   {
@@ -182,18 +155,7 @@ const cases = [
         },
       ],
     },
-    expectOverlay: true,
     expectErrors: [{ kind: "resource", messageIncludes: "" }],
-  },
-  {
-    // Separates "the document never finished arriving" from "the document was
-    // complete and the graph still refused to run" — the deferred module script
-    // only executes once parsing completes, so the two look identical otherwise.
-    label: "complete document, graph still never evaluates",
-    config: { marks: [], domReady: true },
-    expectOverlay: true,
-    expectDiagnosis: "module-eval",
-    expectPersistedStages: ["html-parsed", "dom-ready"],
   },
   {
     label: "unhandled rejection is captured",
@@ -203,7 +165,6 @@ const cases = [
         { type: "unhandledrejection", event: { reason: { message: "boom", stack: "at x" } } },
       ],
     },
-    expectOverlay: true,
     expectErrors: [{ kind: "unhandledrejection", messageIncludes: "boom" }],
   },
 ];
@@ -213,12 +174,6 @@ for (const testCase of cases) {
   const result = run(testCase.config);
   const problems = [];
 
-  if (result.rendered !== testCase.expectOverlay) {
-    problems.push(`overlay rendered=${result.rendered}, expected ${testCase.expectOverlay}`);
-  }
-  if (testCase.expectDiagnosis && !result.summary.includes(testCase.expectDiagnosis)) {
-    problems.push(`expected diagnosis "${testCase.expectDiagnosis}" in "${result.summary}"`);
-  }
   if (testCase.expectPersistedStages) {
     const stages = result.persisted.at(-1)?.marks.map((mark) => mark.stage) ?? [];
     if (stages.join(",") !== testCase.expectPersistedStages.join(",")) {
@@ -236,9 +191,6 @@ for (const testCase of cases) {
         problems.push(`error[${i}].message "${got.message}" lacks "${want.messageIncludes}"`);
       }
     }
-    if (!result.trace.includes(testCase.expectErrors[0].kind.toUpperCase())) {
-      problems.push("captured error is not shown in the overlay trace");
-    }
   }
 
   if (problems.length > 0) {
@@ -246,7 +198,7 @@ for (const testCase of cases) {
     console.error(`FAIL  ${testCase.label}`);
     problems.forEach((problem) => console.error(`        ${problem}`));
   } else {
-    console.log(`PASS  ${testCase.label}${result.summary ? `\n        ${result.summary}` : ""}`);
+    console.log(`PASS  ${testCase.label}`);
   }
 }
 

@@ -40,46 +40,15 @@
       //
       // Deliberately inline, dependency-free, and outside the module graph: it has
       // to keep working when that graph never evaluates, which is one of the very
-      // failures it exists to report. A stalled boot otherwise leaves the splash
-      // below on screen forever with no console output, no failed request, and no
-      // way to tell how far the app actually got.
+      // failures it exists to report. It records only — it renders nothing and
+      // never touches the page, so it cannot make a stalled boot worse than it
+      // already is. Read the trace back from localStorage, or straight out of the
+      // browser profile's LevelDB store when the tab is too wedged for a console.
       (() => {
         const TRACE_KEY = "t3code:boot-trace";
         const KEPT_ATTEMPTS = 5;
         const MAX_ERRORS = 10;
-        const WATCHDOG_MS = 30_000;
-        const COMPLETE_STAGE = "app-rendered";
 
-        // Ordered. The first stage missing from a stalled boot is the diagnosis.
-        const STAGES = [
-          {
-            name: "html-parsed",
-            detail:
-              "The document did not finish parsing. The page was served but stalled before running any script.",
-          },
-          {
-            name: "module-eval",
-            detail:
-              "The page never executed its JavaScript. The module graph did not finish loading, which points at the dev server, the network, or a wedged browser HTTP cache rather than at the application. Try a hard reload; if that does not help, clear this browser profile's cached files.",
-          },
-          {
-            name: "react-render",
-            detail: "JavaScript loaded, but React was never asked to render.",
-          },
-          {
-            name: "route-load-start",
-            detail: "React started, but the router never began loading the root route.",
-          },
-          {
-            name: "route-load-end",
-            detail:
-              "The root route's initial load never finished. The app is waiting on the server session request, which has no timeout.",
-          },
-          {
-            name: COMPLETE_STAGE,
-            detail: "The root route loaded, but the app never mounted.",
-          },
-        ];
 
         const attempt = {
           startedAt: new Date().toISOString(),
@@ -87,7 +56,6 @@
           marks: [],
           errors: [],
         };
-        let complete = false;
 
         // Read the earlier attempts once. localStorage is synchronous and this
         // runs on the boot critical path, so each later stage costs one small
@@ -97,8 +65,8 @@
           const stored = JSON.parse(window.localStorage.getItem(TRACE_KEY) || "[]");
           history = Array.isArray(stored) ? stored.slice(1 - KEPT_ATTEMPTS) : [];
         } catch {
-          // Storage may be unavailable, full, or blocked. The in-memory trace
-          // still drives the overlay, so this is never worth failing the boot for.
+          // Storage may be unavailable, full, or blocked. Losing the trace is
+          // never worth failing the boot for.
         }
 
         const persist = () => {
@@ -111,13 +79,8 @@
 
         const mark = (stage) => {
           attempt.marks.push({ stage, atMs: Math.round(performance.now()) });
-          if (stage === COMPLETE_STAGE) {
-            complete = true;
-          }
           persist();
         };
-
-        const reached = (name) => attempt.marks.some((entry) => entry.stage === name);
 
         // Capture what the console would have shown.
         //
@@ -180,134 +143,6 @@
           }
         });
 
-        const diagnose = () => {
-          // `#root` lives in <body>. If it is gone while `html-parsed` was reached,
-          // the document response itself stopped arriving after <head>: <body> never
-          // parsed, so the page is blank rather than showing the splash and the
-          // module graph never got a chance. Blaming the modules here would point
-          // at the wrong layer.
-          if (reached("html-parsed") && !document.getElementById("root")) {
-            return {
-              stage: "document-truncated",
-              detail:
-                "The HTML document stopped arriving after <head>, so <body> never parsed — that is why the page is blank instead of showing the splash. The document request itself stalled, which points at the network path or the browser's HTTP cache rather than at the application.",
-            };
-          }
-
-          const stalled = STAGES.find((stage) => !reached(stage.name));
-          return stalled
-            ? { stage: stalled.name, detail: stalled.detail }
-            : { stage: "unknown", detail: "Every boot stage was reached but the app is not running." };
-        };
-
-        const render = () => {
-          // A stalled document is the case this most needs to survive: if the
-          // response stops after <head> then <body>, and therefore `#root`, never
-          // exist. Bailing out when `#root` is missing would go silent at exactly
-          // the moment there is something worth saying, so fall back to whatever
-          // host does exist — `documentElement` is always there.
-          const root = document.getElementById("root");
-          const host = root ?? document.body ?? document.documentElement;
-          if (!host) {
-            return;
-          }
-
-          const { stage, detail } = diagnose();
-          // Pinned and explicitly coloured rather than inheriting: when the host is
-          // `documentElement` there is no <body> to inherit from, and an overlay
-          // that renders invisibly is no better than one that never renders.
-          const dark = document.documentElement.classList.contains("dark");
-          const panel = document.createElement("div");
-          panel.setAttribute("role", "alert");
-          panel.style.cssText =
-            "position:fixed;inset:0;z-index:2147483647;overflow:auto;" +
-            "padding:2rem 1.5rem;font:14px/1.6 system-ui,sans-serif;" +
-            "background:" +
-            (dark ? "#161616" : "#ffffff") +
-            ";color:" +
-            (dark ? "#f5f5f5" : "#262626");
-
-          const content = document.createElement("div");
-          content.style.cssText = "max-width:44rem;margin:0 auto";
-          panel.append(content);
-
-          const heading = document.createElement("h1");
-          heading.textContent = "T3 Code did not finish starting";
-          heading.style.cssText = "margin:0 0 .5rem;font-size:1.25rem;font-weight:600";
-          content.append(heading);
-
-          const summary = document.createElement("p");
-          summary.textContent =
-            "Gave up after " + WATCHDOG_MS / 1000 + "s. Diagnosis: " + stage + ".";
-          summary.style.cssText = "margin:0 0 1rem;opacity:.75";
-          content.append(summary);
-
-          const explanation = document.createElement("p");
-          explanation.textContent = detail;
-          explanation.style.cssText = "margin:0 0 1.5rem";
-          content.append(explanation);
-
-          const trace = document.createElement("pre");
-          trace.textContent = attempt.marks
-            .map((entry) => String(entry.atMs).padStart(6) + " ms  " + entry.stage)
-            .concat(
-              attempt.errors.map(
-                (entry) =>
-                  String(entry.atMs).padStart(6) +
-                  " ms  " +
-                  entry.kind.toUpperCase() +
-                  "  " +
-                  (entry.message || entry.url || "") +
-                  (entry.source ? "\n              at " + entry.source : ""),
-              ),
-            )
-            .join("\n");
-          trace.style.cssText =
-            "margin:0 0 1.5rem;padding:.75rem 1rem;overflow-x:auto;border-radius:.5rem;" +
-            "background:rgba(127,127,127,.12);font:12px/1.5 ui-monospace,monospace";
-          content.append(trace);
-
-          const actions = document.createElement("div");
-          actions.style.cssText = "display:flex;gap:.5rem;flex-wrap:wrap";
-
-          const button = (label, onClick) => {
-            const element = document.createElement("button");
-            element.type = "button";
-            element.textContent = label;
-            element.style.cssText =
-              "padding:.5rem .9rem;border:1px solid rgba(127,127,127,.4);border-radius:.5rem;" +
-              "background:transparent;color:inherit;font:inherit;cursor:pointer";
-            element.addEventListener("click", onClick);
-            return element;
-          };
-
-          actions.append(button("Reload", () => location.reload()));
-          actions.append(
-            button("Copy diagnostics", (event) => {
-              const payload = JSON.stringify(
-                { diagnosis: stage, userAgent: navigator.userAgent, attempt },
-                null,
-                2,
-              );
-              navigator.clipboard?.writeText(payload).then(
-                () => {
-                  event.currentTarget.textContent = "Copied";
-                },
-                () => {
-                  event.currentTarget.textContent = "Copy failed";
-                },
-              );
-            }),
-          );
-
-          content.append(actions);
-          if (root) {
-            root.replaceChildren(panel);
-          } else {
-            host.append(panel);
-          }
-        };
-
         window.__t3codeBootMark = mark;
         mark("html-parsed");
 
@@ -316,13 +151,9 @@
         // the app without any error, any pending fetch, or any await — the graph
         // is downloaded and simply never runs. `body-parsed` (emitted at the end
         // of <body>) and `dom-ready` separate that from a graph that finished
-        // parsing and still refused to evaluate.
+        // parsing and still refused to evaluate. Both were reached on 2026-08-01,
+        // so the document is not the problem.
         document.addEventListener("DOMContentLoaded", () => mark("dom-ready"));
-        window.setTimeout(() => {
-          if (!complete) {
-            render();
-          }
-        }, WATCHDOG_MS);
       })();
     </script>
     <style>
