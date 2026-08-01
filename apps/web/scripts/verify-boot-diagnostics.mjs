@@ -52,15 +52,19 @@ class El {
   addEventListener() {}
 }
 
-function run({ marks, hasRoot = true, hasBody = true }) {
+function run({ marks, hasRoot = true, hasBody = true, dispatch = [] }) {
   const root = hasRoot ? new El("div") : null;
   const body = hasBody ? new El("body") : null;
   const documentElement = new El("html");
   const store = new Map();
   const timers = [];
+  const listeners = {};
   const win = {
     localStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) },
     setTimeout: (fn) => timers.push(fn),
+    addEventListener: (type, handler) => {
+      (listeners[type] ??= []).push(handler);
+    },
   };
   const doc = {
     getElementById: (id) => (id === "root" ? root : null),
@@ -80,14 +84,23 @@ function run({ marks, hasRoot = true, hasBody = true }) {
   for (const stage of marks) {
     win.__t3codeBootMark(stage);
   }
+  for (const { type, event } of dispatch) {
+    // `window` inside the injected script is `win`, so an event whose target is
+    // `win` is the module-evaluation case rather than a resource-load failure.
+    const resolved = { ...event, target: event.target === "window" ? win : event.target };
+    (listeners[type] ?? []).forEach((handler) => handler(resolved));
+  }
   timers.forEach((fire) => fire());
 
   const host = root ?? body ?? documentElement;
   const panel = host.children[0];
+  const persisted = JSON.parse(store.get("t3code:boot-trace") ?? "[]");
   return {
     rendered: Boolean(panel),
     summary: panel?.children?.[0]?.children?.[1]?.textContent ?? "",
-    persisted: JSON.parse(store.get("t3code:boot-trace") ?? "[]"),
+    trace: panel?.children?.[0]?.children?.[3]?.textContent ?? "",
+    persisted,
+    errors: persisted.at(-1)?.errors ?? [],
   };
 }
 
@@ -128,6 +141,54 @@ const cases = [
     expectOverlay: false,
     expectPersistedStages: ["html-parsed", ...FULL],
   },
+  {
+    // The case this exists for: the graph downloads intact, throws while
+    // evaluating, and the console is unreachable because the tab is wedged.
+    label: "module evaluation error is captured and persisted",
+    config: {
+      marks: [],
+      dispatch: [
+        {
+          type: "error",
+          event: {
+            target: "window",
+            message: "SyntaxError: The requested module does not provide an export named 'X'",
+            filename: "http://localhost:5733/src/state/server.ts",
+            lineno: 12,
+            colno: 3,
+            error: { stack: "at http://localhost:5733/src/state/server.ts:12:3" },
+          },
+        },
+      ],
+    },
+    expectOverlay: true,
+    expectErrors: [{ kind: "error", messageIncludes: "does not provide an export" }],
+  },
+  {
+    label: "failed resource load is captured with its url",
+    config: {
+      marks: [],
+      dispatch: [
+        {
+          type: "error",
+          event: { target: { tagName: "SCRIPT", src: "http://localhost:5733/src/main.tsx" } },
+        },
+      ],
+    },
+    expectOverlay: true,
+    expectErrors: [{ kind: "resource", messageIncludes: "" }],
+  },
+  {
+    label: "unhandled rejection is captured",
+    config: {
+      marks: ["module-eval"],
+      dispatch: [
+        { type: "unhandledrejection", event: { reason: { message: "boom", stack: "at x" } } },
+      ],
+    },
+    expectOverlay: true,
+    expectErrors: [{ kind: "unhandledrejection", messageIncludes: "boom" }],
+  },
 ];
 
 let failed = 0;
@@ -145,6 +206,21 @@ for (const testCase of cases) {
     const stages = result.persisted.at(-1)?.marks.map((mark) => mark.stage) ?? [];
     if (stages.join(",") !== testCase.expectPersistedStages.join(",")) {
       problems.push(`persisted [${stages}], expected [${testCase.expectPersistedStages}]`);
+    }
+  }
+  if (testCase.expectErrors) {
+    for (const [i, want] of testCase.expectErrors.entries()) {
+      const got = result.errors[i];
+      if (!got) {
+        problems.push(`expected a persisted error at index ${i}, got none`);
+      } else if (got.kind !== want.kind) {
+        problems.push(`error[${i}].kind = ${got.kind}, expected ${want.kind}`);
+      } else if (want.messageIncludes && !String(got.message ?? "").includes(want.messageIncludes)) {
+        problems.push(`error[${i}].message "${got.message}" lacks "${want.messageIncludes}"`);
+      }
+    }
+    if (!result.trace.includes(testCase.expectErrors[0].kind.toUpperCase())) {
+      problems.push("captured error is not shown in the overlay trace");
     }
   }
 

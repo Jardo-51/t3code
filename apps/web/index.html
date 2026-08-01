@@ -46,6 +46,7 @@
       (() => {
         const TRACE_KEY = "t3code:boot-trace";
         const KEPT_ATTEMPTS = 5;
+        const MAX_ERRORS = 10;
         const WATCHDOG_MS = 30_000;
         const COMPLETE_STAGE = "app-rendered";
 
@@ -80,7 +81,12 @@
           },
         ];
 
-        const attempt = { startedAt: new Date().toISOString(), url: location.href, marks: [] };
+        const attempt = {
+          startedAt: new Date().toISOString(),
+          url: location.href,
+          marks: [],
+          errors: [],
+        };
         let complete = false;
 
         // Read the earlier attempts once. localStorage is synchronous and this
@@ -112,6 +118,67 @@
         };
 
         const reached = (name) => attempt.marks.some((entry) => entry.stage === name);
+
+        // Capture what the console would have shown.
+        //
+        // A module graph that downloads intact and then never evaluates has
+        // thrown something, but by then the tab is wedged and its console is
+        // unreachable — so the one piece of evidence that identifies the failing
+        // module is exactly the one that cannot be read. Persisting it puts it in
+        // localStorage, which survives the wedge and can be recovered afterwards.
+        const recordError = (entry) => {
+          if (attempt.errors.length >= MAX_ERRORS) {
+            return;
+          }
+          entry.atMs = Math.round(performance.now());
+          attempt.errors.push(entry);
+          persist();
+        };
+
+        const clip = (value, limit) => String(value ?? "").slice(0, limit);
+
+        // Capture phase: resource-load failures fire at the element and do not
+        // bubble, so a listener on the bubble phase would never see them.
+        window.addEventListener(
+          "error",
+          (event) => {
+            try {
+              const target = event.target;
+              if (target && target !== window && target.tagName) {
+                recordError({
+                  kind: "resource",
+                  tag: String(target.tagName).toLowerCase(),
+                  url: clip(target.src || target.href, 300),
+                });
+                return;
+              }
+              recordError({
+                kind: "error",
+                message: clip(event.message, 500),
+                source: clip(event.filename, 300),
+                line: event.lineno,
+                column: event.colno,
+                stack: clip(event.error && event.error.stack, 2000),
+              });
+            } catch {
+              // Never let the reporter throw inside the failure it is reporting.
+            }
+          },
+          true,
+        );
+
+        window.addEventListener("unhandledrejection", (event) => {
+          try {
+            const reason = event.reason;
+            recordError({
+              kind: "unhandledrejection",
+              message: clip((reason && reason.message) || reason, 500),
+              stack: clip(reason && reason.stack, 2000),
+            });
+          } catch {
+            // As above.
+          }
+        });
 
         const diagnose = () => {
           // `#root` lives in <body>. If it is gone while `html-parsed` was reached,
@@ -183,6 +250,17 @@
           const trace = document.createElement("pre");
           trace.textContent = attempt.marks
             .map((entry) => String(entry.atMs).padStart(6) + " ms  " + entry.stage)
+            .concat(
+              attempt.errors.map(
+                (entry) =>
+                  String(entry.atMs).padStart(6) +
+                  " ms  " +
+                  entry.kind.toUpperCase() +
+                  "  " +
+                  (entry.message || entry.url || "") +
+                  (entry.source ? "\n              at " + entry.source : ""),
+              ),
+            )
             .join("\n");
           trace.style.cssText =
             "margin:0 0 1.5rem;padding:.75rem 1rem;overflow-x:auto;border-radius:.5rem;" +
