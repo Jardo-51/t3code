@@ -52,7 +52,7 @@ class El {
   addEventListener() {}
 }
 
-function run({ marks, hasRoot = true, hasBody = true, dispatch = [] }) {
+function run({ marks, hasRoot = true, hasBody = true, dispatch = [], domReady = false }) {
   const root = hasRoot ? new El("div") : null;
   const body = hasBody ? new El("body") : null;
   const documentElement = new El("html");
@@ -66,9 +66,13 @@ function run({ marks, hasRoot = true, hasBody = true, dispatch = [] }) {
       (listeners[type] ??= []).push(handler);
     },
   };
+  const docListeners = {};
   const doc = {
     getElementById: (id) => (id === "root" ? root : null),
     createElement: (tag) => new El(tag),
+    addEventListener: (type, handler) => {
+      (docListeners[type] ??= []).push(handler);
+    },
     body,
     documentElement,
   };
@@ -81,6 +85,9 @@ function run({ marks, hasRoot = true, hasBody = true, dispatch = [] }) {
     { now: () => 7 },
   );
 
+  if (domReady) {
+    (docListeners.DOMContentLoaded ?? []).forEach((handler) => handler());
+  }
   for (const stage of marks) {
     win.__t3codeBootMark(stage);
   }
@@ -177,6 +184,16 @@ const cases = [
     },
     expectOverlay: true,
     expectErrors: [{ kind: "resource", messageIncludes: "" }],
+  },
+  {
+    // Separates "the document never finished arriving" from "the document was
+    // complete and the graph still refused to run" — the deferred module script
+    // only executes once parsing completes, so the two look identical otherwise.
+    label: "complete document, graph still never evaluates",
+    config: { marks: [], domReady: true },
+    expectOverlay: true,
+    expectDiagnosis: "module-eval",
+    expectPersistedStages: ["html-parsed", "dom-ready"],
   },
   {
     label: "unhandled rejection is captured",

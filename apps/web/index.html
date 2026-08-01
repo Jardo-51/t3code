@@ -310,6 +310,14 @@
 
         window.__t3codeBootMark = mark;
         mark("html-parsed");
+
+        // Module scripts are deferred: they execute only once the document has
+        // finished parsing. So a document whose response stalls mid-stream stops
+        // the app without any error, any pending fetch, or any await — the graph
+        // is downloaded and simply never runs. `body-parsed` (emitted at the end
+        // of <body>) and `dom-ready` separate that from a graph that finished
+        // parsing and still refused to evaluate.
+        document.addEventListener("DOMContentLoaded", () => mark("dom-ready"));
         window.setTimeout(() => {
           if (!complete) {
             render();
@@ -377,5 +385,10 @@
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Classic script: runs as the parser reaches it, unlike the deferred module
+         above. Its absence from the trace means the document never got this far. -->
+    <script>
+      window.__t3codeBootMark && window.__t3codeBootMark("body-parsed");
+    </script>
   </body>
 </html>
