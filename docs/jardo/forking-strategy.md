@@ -8,15 +8,15 @@ file at this path, so it never causes a merge conflict.
 
 ## Branches
 
-| Branch | Role | Rules |
-| --- | --- | --- |
-| `main` | Mirror of `upstream/main`. No custom work, ever. | Fast-forward only. Never commit here. |
-| `custom/main` | The fork's real trunk: upstream plus all custom changes. | Default branch on `origin`. Never force-pushed. |
-| `custom/feature/*` | Where all new work starts. Branched from `custom/main`. | Merged into `custom/main` only. |
-| `custom/*` | Other fork-only work. Branched from `custom/main`. | Free to depend on other custom changes. |
-| `custom/upstream-pr-*` | Unmerged upstream PRs adopted early. Branched from `custom/main`. | Third-party code — read the diff first. |
-| `feature/*` | A promotion branch: one `custom/feature/*` change replayed onto `main`. | Created at PR time. Must not depend on custom code. Never merged into `custom/main`. |
-| `vendor/pr-*` | Raw upstream PR heads, fetched verbatim. | Never merged directly; only cherry-picked from. |
+| Branch                 | Role                                                                    | Rules                                                                                |
+| ---------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `main`                 | Mirror of `upstream/main`. No custom work, ever.                        | Fast-forward only. Never commit here.                                                |
+| `custom/main`          | The fork's real trunk: upstream plus all custom changes.                | Default branch on `origin`. Never force-pushed.                                      |
+| `custom/feature/*`     | Where all new work starts. Branched from `custom/main`.                 | Merged into `custom/main` only.                                                      |
+| `custom/*`             | Other fork-only work. Branched from `custom/main`.                      | Free to depend on other custom changes.                                              |
+| `custom/upstream-pr-*` | Unmerged upstream PRs adopted early. Branched from `custom/main`.       | Third-party code — read the diff first.                                              |
+| `feature/*`            | A promotion branch: one `custom/feature/*` change replayed onto `main`. | Created at PR time. Must not depend on custom code. Never merged into `custom/main`. |
+| `vendor/pr-*`          | Raw upstream PR heads, fetched verbatim.                                | Never merged directly; only cherry-picked from.                                      |
 
 **All work starts on `custom/feature/*`, cut from `custom/main` — including work intended for
 upstream.** A `feature/*` branch is not where you develop; it is a branch created later, at the
@@ -56,6 +56,8 @@ git switch main
 git merge --ff-only upstream/main
 git push origin main
 ```
+
+Use `git merge --ff-only <SHA>` if you want a specific commit (released version) rather than the upstream HEAD.
 
 If `--ff-only` fails, something was committed to `main`. That is the signal to investigate, not to
 reach for a regular merge.
@@ -123,10 +125,10 @@ That range is exactly the feature's own commits, since the branch was cut from `
 works whether or not the feature has been merged into the trunk yet — if it has, use the squashed
 merge commit or the pre-merge branch tip instead.
 
-Then build and test it *there*. This is the point where a hidden dependency on custom code shows up,
+Then build and test it _there_. This is the point where a hidden dependency on custom code shows up,
 and it is cheaper to find now than in upstream's review.
 
-What matters is being current when the PR is *opened*, not when the branch was created. If the branch
+What matters is being current when the PR is _opened_, not when the branch was created. If the branch
 goes stale while under review, rebase it rather than merging upstream into it:
 
 ```bash
@@ -162,7 +164,7 @@ everything the fork will ever sync. So when a feature goes to both places:
    commit with a different SHA**.
 3. The next upstream sync brings in a commit git cannot recognise as equivalent.
 
-Step 3 is less alarming than it sounds. Where both sides made the *same* change relative to the merge
+Step 3 is less alarming than it sounds. Where both sides made the _same_ change relative to the merge
 base, git merges cleanly with no conflict at all — so a PR upstream took as-is costs nothing. Conflict
 size tracks how much review changed the PR, not how big the PR was.
 
@@ -261,7 +263,7 @@ git checkout --theirs path/to/file    # mid-merge, "theirs" is the main side
 git add path/to/file                  # --theirs does not stage
 ```
 
-`--theirs` only works on paths still marked as conflicted, and it takes upstream's *whole file* — any
+`--theirs` only works on paths still marked as conflicted, and it takes upstream's _whole file_ — any
 custom edits living in it are dropped too, including ones unrelated to the adopted PR. That is the
 intent, not an accident: re-apply the local adaptations as a separate commit afterwards. Blending
 hunk by hunk is where duplication bugs come from.
