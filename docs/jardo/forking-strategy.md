@@ -14,7 +14,7 @@ file at this path, so it never causes a merge conflict.
 | `custom/main`          | The fork's real trunk: upstream plus all custom changes.                | Default branch on `origin`. Never force-pushed.                                      |
 | `custom/feature/*`     | Where all new work starts. Branched from `custom/main`.                 | Merged into `custom/main` only.                                                      |
 | `custom/*`             | Other fork-only work. Branched from `custom/main`.                      | Free to depend on other custom changes.                                              |
-| `custom/upstream-pr-*` | Unmerged upstream PRs adopted early. Branched from `custom/main`.       | Third-party code — read the diff first.                                              |
+| `custom/upstream-pr/*` | Unmerged upstream PRs adopted early. Branched from `custom/main`.       | Third-party code — read the diff first.                                              |
 | `feature/*`            | A promotion branch: one `custom/feature/*` change replayed onto `main`. | Created at PR time. Must not depend on custom code. Never merged into `custom/main`. |
 | `vendor/pr-*`          | Raw upstream PR heads, fetched verbatim.                                | Never merged directly; only cherry-picked from.                                      |
 
@@ -224,7 +224,7 @@ Branch from `custom/main` so the change lands in the context of the fork's own c
 surface here rather than later:
 
 ```bash
-git switch -c custom/upstream-pr-5013-local-bin-path custom/main
+git switch -c custom/upstream-pr/5013-local-bin-path custom/main
 git cherry-pick -x --no-merges "$(git merge-base main vendor/pr-5013)..vendor/pr-5013"
 ```
 
@@ -238,7 +238,7 @@ Merge with `--no-ff` and put the PR number in the subject:
 
 ```bash
 git switch custom/main
-git merge --no-ff custom/upstream-pr-5013-local-bin-path \
+git merge --no-ff custom/upstream-pr/5013-local-bin-path \
   -m "vendor: adopt upstream PR #5013 (server: ~/.local/bin on boot service PATH)"
 ```
 
@@ -293,7 +293,7 @@ touched adopted code: build, run the tests, and grep for identifiers the PR intr
   policy. Two things to know first: the revert leaves the adoption merge still "merged" as far as git
   is concerned, so re-adopting that branch later means reverting the revert; and if the assumption
   about upstream was wrong, the sync brings nothing back and the fix is silently gone.
-- **Never merge a `custom/upstream-pr-*` branch into a `feature/*` branch.** That would propose
+- **Never merge a `custom/upstream-pr/*` branch into a `feature/*` branch.** That would propose
   someone else's unmerged work to upstream as our own.
 - **Adopted code is unreviewed and runs with shell access.** T3 Code is an agent with access to the
   machine. Read the diff before merging, not after.

@@ -1,6 +1,6 @@
 ---
 name: adopt-upstream-pr
-description: Adopt an unmerged pull request from upstream (pingdotgg/t3code) into this fork, following docs/jardo/forking-strategy.md. Takes the upstream PR number as its argument. Fetches the PR head, reviews the diff, cherry-picks it onto a custom/upstream-pr-* branch cut from custom/main, verifies it builds and tests, pushes the branch, and opens a PR into custom/main on the fork — it stops there without merging. Use when the user asks to adopt, vendor, pull in, or take an upstream PR by number.
+description: Adopt an unmerged pull request from upstream (pingdotgg/t3code) into this fork, following docs/jardo/forking-strategy.md. Takes the upstream PR number as its argument. Fetches the PR head, reviews the diff, cherry-picks it onto a custom/upstream-pr/* branch cut from custom/main, verifies it builds and tests, pushes the branch, and opens a PR into custom/main on the fork — it stops there without merging. Use when the user asks to adopt, vendor, pull in, or take an upstream PR by number.
 ---
 
 # Adopt an upstream PR
@@ -58,7 +58,7 @@ git switch custom/main && git pull --ff-only origin custom/main
 ## 2. Read the PR before running any of its code
 
 **This is not optional.** T3 Code is an agent with shell access to the machine, and an upstream PR is
-usually third-party, unreviewed code. Read the diff *before* it lands on any branch you will build or
+usually third-party, unreviewed code. Read the diff _before_ it lands on any branch you will build or
 run.
 
 ```bash
@@ -100,11 +100,11 @@ git fetch upstream pull/<N>/head:vendor/pr-<N>
 Branch from `custom/main` so the change lands in the context of the fork's own code and any conflicts
 surface now rather than during a later sync.
 
-Name the branch `custom/upstream-pr-<N>-<slug>`, where `<slug>` is a short kebab-case summary derived
-from the PR title (e.g. `custom/upstream-pr-5013-local-bin-path`).
+Name the branch `custom/upstream-pr/<N>-<slug>`, where `<slug>` is a short kebab-case summary derived
+from the PR title (e.g. `custom/upstream-pr/5013-local-bin-path`).
 
 ```bash
-git switch -c custom/upstream-pr-<N>-<slug> custom/main
+git switch -c custom/upstream-pr/<N>-<slug> custom/main
 git cherry-pick -x --no-merges "$(git merge-base main vendor/pr-<N>)..vendor/pr-<N>"
 ```
 
@@ -112,12 +112,12 @@ Both flags are load-bearing — do not drop either:
 
 - `--no-merges`: a PR open for a while usually has upstream merged into it. Without this, the
   cherry-pick applies a few commits and then aborts on the first merge commit (`is a merge but no -m
-  option was given`), leaving a half-applied sequencer state to clean up.
+option was given`), leaving a half-applied sequencer state to clean up.
 - `-x`: records the original SHA in each commit message, which is what makes the adopted commits
   traceable back to the PR head later.
 
 On conflict: resolve it, `git add` the files, `git cherry-pick --continue`. Resolve toward keeping
-both the fork's custom behaviour and the PR's intent — at this point upstream's version is *not*
+both the fork's custom behaviour and the PR's intent — at this point upstream's version is _not_
 canonical (the PR is unmerged), so do not blanket-take either side. If the conflicts are substantial
 or you are unsure of the intent, `git cherry-pick --abort`, then report what conflicted and ask.
 
@@ -160,7 +160,7 @@ commits patch-identical to upstream's so they stay recognisable later.
 ## 6. Push and open the PR
 
 ```bash
-git push -u origin custom/upstream-pr-<N>-<slug>
+git push -u origin custom/upstream-pr/<N>-<slug>
 ```
 
 Then open the PR against `custom/main` **on the fork**:
@@ -168,7 +168,7 @@ Then open the PR against `custom/main` **on the fork**:
 ```bash
 gh pr create --repo Jardo-51/t3code \
   --base custom/main \
-  --head custom/upstream-pr-<N>-<slug> \
+  --head custom/upstream-pr/<N>-<slug> \
   --title "vendor: adopt upstream PR #<N> (<short description>)" \
   --body "<body from below>"
 ```
@@ -203,6 +203,6 @@ Then report the branch name, the PR URL, and the step 2 flags to the user.
   wholesale** (`git checkout --theirs <path>` then `git add <path>` — `--theirs` does not stage), then
   re-apply local adaptations as a separate commit. Blending hunk by hunk is where duplication bugs
   come from.
-- **Never merge a `custom/upstream-pr-*` branch into a `feature/*` branch.** That would propose
+- **Never merge a `custom/upstream-pr/*` branch into a `feature/*` branch.** That would propose
   someone else's unmerged work to upstream as our own.
 - Custom features may depend on adopted code freely — that is the point of the no-revert default.
