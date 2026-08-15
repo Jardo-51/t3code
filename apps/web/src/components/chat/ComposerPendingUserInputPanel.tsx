@@ -66,9 +66,13 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     optionLabel: string;
   } | null>(null);
   // Collapsing hides everything but the header so a tall prompt stops covering
-  // the thread the user is trying to read. Scoped to this prompt: the card is
-  // keyed by request id, so the next prompt starts expanded again.
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // the thread the user is trying to read. Scoped to a single question: the card
+  // is keyed by request id so the next prompt starts expanded, and storing the
+  // collapsed question's id (rather than a bare flag) reopens the card when the
+  // prompt advances to its next question, which can happen without a click —
+  // sending from the composer advances the active question.
+  const [collapsedQuestionId, setCollapsedQuestionId] = useState<string | null>(null);
+  const isCollapsed = collapsedQuestionId !== null && collapsedQuestionId === activeQuestion?.id;
   const bodyId = useId();
 
   useEffect(() => {
@@ -169,7 +173,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
         }
         data-pending-user-input-toggle="true"
         onClick={() => {
-          setIsCollapsed((collapsed) => !collapsed);
+          setCollapsedQuestionId(isCollapsed ? null : activeQuestion.id);
         }}
         className={cn(
           "group -mx-1.5 flex w-full items-center gap-3 rounded-md px-1.5 py-0.5 text-left outline-none transition-colors duration-150 cursor-pointer hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-primary/25",
