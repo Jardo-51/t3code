@@ -178,7 +178,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
           title={
             isCollapsed ? "Show the question and its options" : "Hide the question and its options"
           }
-          data-pending-user-input-toggle="true"
+          data-pending-user-input-toggle={isCollapsed ? "collapsed" : "expanded"}
           className="group -mx-1.5 flex w-full items-center gap-3 rounded-md px-1.5 py-0.5 text-left outline-none transition-colors duration-150 hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-primary/25"
         >
           <span className="text-secondary-label text-[11px] font-semibold tracking-widest uppercase group-hover:text-foreground">

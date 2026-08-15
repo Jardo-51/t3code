@@ -39,8 +39,9 @@ describe("ComposerPendingUserInputPanel", () => {
   it("renders the header as a disclosure control for the question body", () => {
     const markup = renderPanel();
 
-    const toggle = markup.match(/<button[^>]*data-pending-user-input-toggle="true"[^>]*>/)?.[0];
+    const toggle = markup.match(/<button[^>]*data-pending-user-input-toggle="[^"]*"[^>]*>/)?.[0];
     expect(toggle).toBeDefined();
+    expect(toggle).toContain('data-pending-user-input-toggle="expanded"');
     expect(toggle).toContain('aria-expanded="true"');
     expect(toggle).toContain("cursor-pointer");
 
