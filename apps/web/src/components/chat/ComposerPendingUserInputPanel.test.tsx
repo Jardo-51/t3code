@@ -43,7 +43,7 @@ describe("ComposerPendingUserInputPanel", () => {
     expect(toggle).toBeDefined();
     expect(toggle).toContain('data-pending-user-input-toggle="expanded"');
     expect(toggle).toContain('aria-expanded="true"');
-    expect(toggle).toContain("cursor-pointer");
+    expect(toggle).toContain('type="button"');
 
     const controlledId = toggle?.match(/aria-controls="([^"]+)"/)?.[1];
     expect(controlledId).toBeDefined();
