@@ -197,11 +197,13 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
               {activeQuestion.question}
             </span>
           ) : null}
+          {/* The chevron points at the body: down while it is open below the
+              header, up while it is collapsed into it. */}
           <ChevronDownIcon
             aria-hidden="true"
             className={cn(
               "ml-auto size-3.5 shrink-0 text-secondary-label transition-transform duration-150 group-hover:text-foreground",
-              !isCollapsed && "rotate-180",
+              isCollapsed && "rotate-180",
             )}
           />
         </CollapsibleTrigger>
