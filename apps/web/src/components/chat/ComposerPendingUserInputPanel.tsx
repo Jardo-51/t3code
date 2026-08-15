@@ -170,19 +170,19 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
         setCollapsedQuestionId(open ? null : activeQuestion.id);
       }}
     >
-      {/* The trigger keeps its own padded wrapper so its hover background and
-          focus ring can bleed past the card's text column, the way the header
-          row did before it became a disclosure control. Padding gives the hit
-          area room to breathe; the matching negative margins take that room
-          back from the layout, so the header label stays on the question's
-          left edge and the panel below does not get pushed down. */}
-      <div className="px-4 sm:px-5">
+      {/* The trigger's wrapper is inset less than the card's text column, and
+          the trigger pays the difference back as padding: the hover background
+          and focus ring bleed 10px past that column on both sides, while the
+          header label and the chevron still line up with the left and right
+          edges of the question text below. The negative block margin keeps the
+          taller hit area from pushing the panel down. */}
+      <div className="px-1.5 sm:px-2.5">
         <CollapsibleTrigger
           title={
             isCollapsed ? "Show the question and its options" : "Hide the question and its options"
           }
           data-pending-user-input-toggle={isCollapsed ? "collapsed" : "expanded"}
-          className="group -mx-2.5 -my-1 flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left outline-none transition-colors duration-150 hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-primary/25"
+          className="group -my-1 flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left outline-none transition-colors duration-150 hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-primary/25"
         >
           <span className="text-secondary-label text-[11px] font-semibold tracking-widest uppercase group-hover:text-foreground">
             {activeQuestion.header}
