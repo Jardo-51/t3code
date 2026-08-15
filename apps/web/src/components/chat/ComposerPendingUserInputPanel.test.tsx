@@ -46,7 +46,7 @@ describe("ComposerPendingUserInputPanel", () => {
 
     const controlledId = toggle?.match(/aria-controls="([^"]+)"/)?.[1];
     expect(controlledId).toBeDefined();
-    expect(markup).toContain(`<div id="${controlledId}">`);
+    expect(markup).toMatch(new RegExp(`<div[^>]*\\sid="${controlledId}"`));
   });
 
   it("starts expanded so the question and its options are visible", () => {

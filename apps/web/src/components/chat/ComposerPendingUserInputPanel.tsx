@@ -1,11 +1,12 @@
 import { type ApprovalRequestId } from "@t3tools/contracts";
-import { memo, useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import { memo, useEffect, useEffectEvent, useRef, useState } from "react";
 import { type PendingUserInput } from "../../session-logic";
 import {
   derivePendingUserInputProgress,
   type PendingUserInputDraftAnswer,
 } from "../../pendingUserInput";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { cn } from "~/lib/utils";
 
 interface PendingUserInputPanelProps {
@@ -73,7 +74,6 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   // sending from the composer advances the active question.
   const [collapsedQuestionId, setCollapsedQuestionId] = useState<string | null>(null);
   const isCollapsed = collapsedQuestionId !== null && collapsedQuestionId === activeQuestion?.id;
-  const bodyId = useId();
 
   useEffect(() => {
     onAdvanceRef.current = onAdvance;
@@ -163,41 +163,46 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   const customAnswerActive = progress.customAnswer.trim().length > 0;
 
   return (
-    <div className="px-4 py-3 sm:px-5">
-      <button
-        type="button"
-        aria-expanded={!isCollapsed}
-        aria-controls={bodyId}
-        title={
-          isCollapsed ? "Show the question and its options" : "Hide the question and its options"
-        }
-        data-pending-user-input-toggle="true"
-        onClick={() => {
-          setCollapsedQuestionId(isCollapsed ? null : activeQuestion.id);
-        }}
-        className={cn(
-          "group -mx-1.5 flex w-full items-center gap-3 rounded-md px-1.5 py-0.5 text-left outline-none transition-colors duration-150 cursor-pointer hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-primary/25",
-          !isCollapsed && "mb-2",
-        )}
-      >
-        <span className="text-secondary-label text-[11px] font-semibold tracking-widest uppercase group-hover:text-foreground">
-          {activeQuestion.header}
-        </span>
-        {prompt.questions.length > 1 ? (
-          <span className="flex h-5 items-center rounded-md bg-muted/60 px-1.5 text-secondary-label text-[10px] font-medium tabular-nums">
-            {questionIndex + 1}/{prompt.questions.length}
+    <Collapsible
+      className="py-3"
+      open={!isCollapsed}
+      onOpenChange={(open) => {
+        setCollapsedQuestionId(open ? null : activeQuestion.id);
+      }}
+    >
+      {/* The trigger keeps its own padded wrapper so its hover background and
+          focus ring can bleed past the card's text column, the way the header
+          row did before it became a disclosure control. */}
+      <div className="px-4 sm:px-5">
+        <CollapsibleTrigger
+          title={
+            isCollapsed ? "Show the question and its options" : "Hide the question and its options"
+          }
+          data-pending-user-input-toggle="true"
+          className="group -mx-1.5 flex w-full items-center gap-3 rounded-md px-1.5 py-0.5 text-left outline-none transition-colors duration-150 hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-primary/25"
+        >
+          <span className="text-secondary-label text-[11px] font-semibold tracking-widest uppercase group-hover:text-foreground">
+            {activeQuestion.header}
           </span>
-        ) : null}
-        <ChevronDownIcon
-          aria-hidden="true"
-          className={cn(
-            "ml-auto size-3.5 shrink-0 text-secondary-label transition-transform duration-150 group-hover:text-foreground",
-            !isCollapsed && "rotate-180",
-          )}
-        />
-      </button>
-      {isCollapsed ? null : (
-        <div id={bodyId}>
+          {prompt.questions.length > 1 ? (
+            <span className="flex h-5 items-center rounded-md bg-muted/60 px-1.5 text-secondary-label text-[10px] font-medium tabular-nums">
+              {questionIndex + 1}/{prompt.questions.length}
+            </span>
+          ) : null}
+          <ChevronDownIcon
+            aria-hidden="true"
+            className={cn(
+              "ml-auto size-3.5 shrink-0 text-secondary-label transition-transform duration-150 group-hover:text-foreground",
+              !isCollapsed && "rotate-180",
+            )}
+          />
+        </CollapsibleTrigger>
+      </div>
+      {/* The panel carries the horizontal padding itself: it clips its content
+          while the height animates, so the option buttons have to sit inside
+          that padding or their focus rings get shaved off at the edges. */}
+      <CollapsiblePanel className="px-4 sm:px-5">
+        <div className="pt-2 pb-0.5">
           <p className="text-sm text-foreground/90">{activeQuestion.question}</p>
           {activeQuestion.multiSelect ? (
             <p className="mt-1 text-secondary-label text-xs">Select one or more options.</p>
@@ -257,7 +262,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
             })}
           </div>
         </div>
-      )}
-    </div>
+      </CollapsiblePanel>
+    </Collapsible>
   );
 });
