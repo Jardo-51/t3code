@@ -1,11 +1,11 @@
 import { type ApprovalRequestId } from "@t3tools/contracts";
-import { memo, useEffect, useEffectEvent, useRef, useState } from "react";
+import { memo, useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { type PendingUserInput } from "../../session-logic";
 import {
   derivePendingUserInputProgress,
   type PendingUserInputDraftAnswer,
 } from "../../pendingUserInput";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 
 interface PendingUserInputPanelProps {
@@ -65,6 +65,11 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     questionId: string;
     optionLabel: string;
   } | null>(null);
+  // Collapsing hides everything but the header so a tall prompt stops covering
+  // the thread the user is trying to read. Scoped to this prompt: the card is
+  // keyed by request id, so the next prompt starts expanded again.
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const bodyId = useId();
 
   useEffect(() => {
     onAdvanceRef.current = onAdvance;
@@ -118,9 +123,10 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
 
   // Keyboard shortcut: number keys 1-9 select corresponding options when focus is
   // outside editable fields. Multi-select prompts toggle options in place; single-
-  // select prompts keep the existing auto-advance behavior.
+  // select prompts keep the existing auto-advance behavior. Collapsed prompts opt
+  // out, since the numbers they refer to are not on screen.
   useEffect(() => {
-    if (!activeQuestion || isResponding) return;
+    if (!activeQuestion || isResponding || isCollapsed) return;
     const handler = (event: globalThis.KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target;
@@ -144,7 +150,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [activeQuestion, isResponding]);
+  }, [activeQuestion, isCollapsed, isResponding]);
 
   if (!activeQuestion) {
     return null;
@@ -154,8 +160,23 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
 
   return (
     <div className="px-4 py-3 sm:px-5">
-      <div className="mb-2 flex items-center gap-3">
-        <span className="text-secondary-label text-[11px] font-semibold tracking-widest uppercase">
+      <button
+        type="button"
+        aria-expanded={!isCollapsed}
+        aria-controls={bodyId}
+        title={
+          isCollapsed ? "Show the question and its options" : "Hide the question and its options"
+        }
+        data-pending-user-input-toggle="true"
+        onClick={() => {
+          setIsCollapsed((collapsed) => !collapsed);
+        }}
+        className={cn(
+          "group -mx-1.5 flex w-full items-center gap-3 rounded-md px-1.5 py-0.5 text-left outline-none transition-colors duration-150 cursor-pointer hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-primary/25",
+          !isCollapsed && "mb-2",
+        )}
+      >
+        <span className="text-secondary-label text-[11px] font-semibold tracking-widest uppercase group-hover:text-foreground">
           {activeQuestion.header}
         </span>
         {prompt.questions.length > 1 ? (
@@ -163,65 +184,76 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
             {questionIndex + 1}/{prompt.questions.length}
           </span>
         ) : null}
-      </div>
-      <p className="text-sm text-foreground/90">{activeQuestion.question}</p>
-      {activeQuestion.multiSelect ? (
-        <p className="mt-1 text-secondary-label text-xs">Select one or more options.</p>
-      ) : null}
-      <div className="mt-3 space-y-1.5">
-        {activeQuestion.options.map((option, index) => {
-          const isOptimisticallySelected =
-            optimisticSingleSelect?.questionId === activeQuestion.id &&
-            optimisticSingleSelect.optionLabel === option.label;
-          const isSelected =
-            isOptimisticallySelected ||
-            (!customAnswerActive && progress.selectedOptionLabels.includes(option.label));
-          const shortcutKey = index < 9 ? index + 1 : null;
-          const className = cn(
-            "group flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left outline-none transition-all duration-150 focus-visible:border-primary/40 focus-visible:ring-1 focus-visible:ring-primary/25",
-            isSelected
-              ? "border-primary/30 bg-primary/8 text-foreground"
-              : "border-transparent bg-muted/22 text-foreground/85 hover:border-border/45 hover:bg-muted/34",
-            isResponding && "opacity-50 cursor-not-allowed",
-            !isResponding && "cursor-pointer",
-          );
-          const content = (
-            <>
-              <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-                <span className="text-sm font-medium">{option.label}</span>
-                {option.description && option.description !== option.label ? (
-                  <span className="text-secondary-label text-xs">{option.description}</span>
-                ) : null}
-              </div>
-              {isSelected ? (
-                <CheckIcon className="size-3.5 shrink-0 text-primary" />
-              ) : shortcutKey !== null ? (
-                <kbd
-                  className={cn(
-                    "flex size-5 shrink-0 items-center justify-center rounded border border-border/50 text-[11px] font-medium tabular-nums transition-colors duration-150",
-                    "bg-background/35 text-secondary-label group-hover:border-border/70 group-hover:text-foreground",
-                  )}
+        <ChevronDownIcon
+          aria-hidden="true"
+          className={cn(
+            "ml-auto size-3.5 shrink-0 text-secondary-label transition-transform duration-150 group-hover:text-foreground",
+            !isCollapsed && "rotate-180",
+          )}
+        />
+      </button>
+      {isCollapsed ? null : (
+        <div id={bodyId}>
+          <p className="text-sm text-foreground/90">{activeQuestion.question}</p>
+          {activeQuestion.multiSelect ? (
+            <p className="mt-1 text-secondary-label text-xs">Select one or more options.</p>
+          ) : null}
+          <div className="mt-3 space-y-1.5">
+            {activeQuestion.options.map((option, index) => {
+              const isOptimisticallySelected =
+                optimisticSingleSelect?.questionId === activeQuestion.id &&
+                optimisticSingleSelect.optionLabel === option.label;
+              const isSelected =
+                isOptimisticallySelected ||
+                (!customAnswerActive && progress.selectedOptionLabels.includes(option.label));
+              const shortcutKey = index < 9 ? index + 1 : null;
+              const className = cn(
+                "group flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left outline-none transition-all duration-150 focus-visible:border-primary/40 focus-visible:ring-1 focus-visible:ring-primary/25",
+                isSelected
+                  ? "border-primary/30 bg-primary/8 text-foreground"
+                  : "border-transparent bg-muted/22 text-foreground/85 hover:border-border/45 hover:bg-muted/34",
+                isResponding && "opacity-50 cursor-not-allowed",
+                !isResponding && "cursor-pointer",
+              );
+              const content = (
+                <>
+                  <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">{option.label}</span>
+                    {option.description && option.description !== option.label ? (
+                      <span className="text-secondary-label text-xs">{option.description}</span>
+                    ) : null}
+                  </div>
+                  {isSelected ? (
+                    <CheckIcon className="size-3.5 shrink-0 text-primary" />
+                  ) : shortcutKey !== null ? (
+                    <kbd
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded border border-border/50 text-[11px] font-medium tabular-nums transition-colors duration-150",
+                        "bg-background/35 text-secondary-label group-hover:border-border/70 group-hover:text-foreground",
+                      )}
+                    >
+                      {shortcutKey}
+                    </kbd>
+                  ) : null}
+                </>
+              );
+              return (
+                <button
+                  key={`${activeQuestion.id}:${option.label}`}
+                  type="button"
+                  disabled={isResponding}
+                  onClick={() => {
+                    handleOptionSelection(activeQuestion.id, option.label);
+                  }}
+                  className={className}
                 >
-                  {shortcutKey}
-                </kbd>
-              ) : null}
-            </>
-          );
-          return (
-            <button
-              key={`${activeQuestion.id}:${option.label}`}
-              type="button"
-              disabled={isResponding}
-              onClick={() => {
-                handleOptionSelection(activeQuestion.id, option.label);
-              }}
-              className={className}
-            >
-              {content}
-            </button>
-          );
-        })}
-      </div>
+                  {content}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 });
