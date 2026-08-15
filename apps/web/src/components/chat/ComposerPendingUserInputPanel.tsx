@@ -189,6 +189,14 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
               {questionIndex + 1}/{prompt.questions.length}
             </span>
           ) : null}
+          {/* Collapsed, the header is otherwise just a section label and a
+              counter, so the question itself is echoed here as a one-line
+              reminder of what is being asked. */}
+          {isCollapsed ? (
+            <span className="min-w-0 flex-1 truncate text-secondary-label text-xs">
+              {activeQuestion.question}
+            </span>
+          ) : null}
           <ChevronDownIcon
             aria-hidden="true"
             className={cn(
