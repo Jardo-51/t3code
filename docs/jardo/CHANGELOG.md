@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.35-nightly.20260826.1195-jardo.1] - Unreleased
 
+### Added
+
+- Fork-local `Custom Android APK` workflow that builds the mobile app from source on GitHub-hosted runners and uploads a sideloadable APK
+
 ## [0.0.34-nightly.20260815.1098-jardo.1] - 2026-08-19
 
 ### Added

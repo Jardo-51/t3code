@@ -1,0 +1,119 @@
+name: Custom Android APK
+
+# Fork-local: builds a sideloadable APK on GitHub-hosted runners, with no Expo
+# account and no EAS build. Upstream's mobile workflows all need `EXPO_TOKEN`
+# and Blacksmith runners, neither of which a fork has.
+#
+# The APK is signed with the keystore Expo's Android template ships
+# (`android/app/debug.keystore`), which `expo prebuild` writes fresh on every
+# run. That file is a constant, so every build here carries the same signature
+# and installs over the previous one as an upgrade, keeping app data. It is a
+# publicly known key: fine for sideloading your own builds, not for
+# distributing to anyone else.
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: App variant to build
+        type: choice
+        default: production
+        options:
+          - production
+          - preview
+      architectures:
+        description: ABIs to compile (arm64-v8a covers every phone since ~2017)
+        type: choice
+        default: arm64-v8a
+        options:
+          - arm64-v8a
+          - armeabi-v7a,arm64-v8a,x86,x86_64
+
+concurrency:
+  group: custom-android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      APP_VARIANT: ${{ inputs.variant }}
+      EXPO_NO_GIT_STATUS: "1"
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/mobile...
+
+      - name: Setup Gradle
+        # Caches ~/.gradle across runs. The android/ project itself is
+        # regenerated every run, so only the dependency cache carries over.
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
+
+      - name: Generate the native project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Assemble release APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=${{ inputs.architectures }}
+
+      - name: Name the APK
+        id: apk
+        run: |
+          src=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          test -f "$src"
+          name="t3code-${{ inputs.variant }}-$(git rev-parse --short HEAD)"
+          mv "$src" "$RUNNER_TEMP/$name.apk"
+          echo "path=$RUNNER_TEMP/$name.apk" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${{ steps.apk.outputs.name }}.apk"
+            echo
+            echo "- variant: \`${{ inputs.variant }}\`"
+            echo "- ABIs: \`${{ inputs.architectures }}\`"
+            echo "- commit: \`$(git rev-parse HEAD)\`"
+            echo "- size: $(du -h "${{ steps.apk.outputs.path }}" | cut -f1)"
+            echo
+            echo "Download the artifact above, unzip it, and install the APK on your phone."
+          } >> "$GITHUB_STEP_SUMMARY"
