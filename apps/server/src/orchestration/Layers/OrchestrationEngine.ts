@@ -1,4 +1,5 @@
 import type {
+  DraftId,
   OrchestrationClientOrigin,
   OrchestrationEvent,
   OrchestrationReadModel,
@@ -61,8 +62,8 @@ interface CommandEnvelope {
 }
 
 function commandToAggregateRef(command: OrchestrationCommand): {
-  readonly aggregateKind: "project" | "thread";
-  readonly aggregateId: ProjectId | ThreadId;
+  readonly aggregateKind: "project" | "thread" | "draft";
+  readonly aggregateId: ProjectId | ThreadId | DraftId;
 } {
   switch (command.type) {
     case "project.create":
@@ -71,6 +72,15 @@ function commandToAggregateRef(command: OrchestrationCommand): {
       return {
         aggregateKind: "project",
         aggregateId: command.projectId,
+      };
+    // A draft carries the thread id its first turn will claim, so it must be
+    // routed by its own id — keying it by `threadId` would make the draft and
+    // the thread it becomes share one aggregate and one receipt namespace.
+    case "draft.upsert":
+    case "draft.discard":
+      return {
+        aggregateKind: "draft",
+        aggregateId: command.draftId,
       };
     default:
       return {

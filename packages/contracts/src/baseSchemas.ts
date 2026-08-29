@@ -70,6 +70,13 @@ export const ThreadId = makeEntityId("ThreadId");
 export type ThreadId = typeof ThreadId.Type;
 export const ProjectId = makeEntityId("ProjectId");
 export type ProjectId = typeof ProjectId.Type;
+/**
+ * Identifies an unsent draft. A draft carries the `ThreadId` its first turn
+ * will use, so the two ids coexist for the draft's whole life and only the
+ * `DraftId` is retired when the draft is sent or discarded.
+ */
+export const DraftId = makeEntityId("DraftId");
+export type DraftId = typeof DraftId.Type;
 export const EnvironmentId = makeEntityId("EnvironmentId");
 export type EnvironmentId = typeof EnvironmentId.Type;
 export const CommandId = makeEntityId("CommandId");

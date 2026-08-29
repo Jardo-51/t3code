@@ -8,7 +8,9 @@
  */
 import type {
   CheckpointRef,
+  DraftId,
   OrchestrationCheckpointSummary,
+  OrchestrationDraft,
   OrchestrationProject,
   OrchestrationProjectShell,
   OrchestrationReadModel,
@@ -162,6 +164,13 @@ export interface ProjectionSnapshotQueryShape {
   readonly getThreadShellById: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<OrchestrationThreadShell>, ProjectionRepositoryError>;
+
+  /**
+   * Read a single draft by id, for refreshing one row on the shell stream.
+   */
+  readonly getDraftById: (
+    draftId: DraftId,
+  ) => Effect.Effect<Option.Option<OrchestrationDraft>, ProjectionRepositoryError>;
 
   /**
    * Read a single active thread detail snapshot by id.

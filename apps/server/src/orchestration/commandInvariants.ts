@@ -1,5 +1,7 @@
 import type {
+  DraftId,
   OrchestrationCommand,
+  OrchestrationDraft,
   OrchestrationProject,
   OrchestrationReadModel,
   OrchestrationThread,
@@ -23,6 +25,20 @@ export function findThreadById(
   threadId: ThreadId,
 ): OrchestrationThread | undefined {
   return readModel.threads.find((thread) => thread.id === threadId);
+}
+
+export function findDraftById(
+  readModel: OrchestrationReadModel,
+  draftId: DraftId,
+): OrchestrationDraft | undefined {
+  return readModel.drafts.find((draft) => draft.id === draftId);
+}
+
+export function findDraftByThreadId(
+  readModel: OrchestrationReadModel,
+  threadId: ThreadId,
+): OrchestrationDraft | undefined {
+  return readModel.drafts.find((draft) => draft.threadId === threadId);
 }
 
 export function findProjectById(
