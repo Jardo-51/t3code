@@ -289,6 +289,21 @@ export interface ComposerThreadDraftState {
 }
 
 /**
+ * The half of a composer another client can speak for. Everything else in
+ * `ComposerThreadDraftState` is device-local capture — images, terminal and
+ * element picks, annotations — and stays where it was made.
+ */
+export type RemoteComposerDraftContent = Pick<
+  ComposerThreadDraftState,
+  | "prompt"
+  | "modelSelectionByProvider"
+  | "activeProvider"
+  | "modelSelectionExplicit"
+  | "runtimeMode"
+  | "interactionMode"
+>;
+
+/**
  * True when the user has invested real content in the draft: typed text or
  * any attachment/context. Model selection and mode choices alone do not
  * count — those are ambient defaults, not work in progress. Used by the
@@ -437,6 +452,22 @@ interface ComposerDraftStoreState {
   /** Removes draft-session metadata after promotion is complete. */
   finalizePromotedDraftThread: (threadRef: ComposerThreadTarget) => void;
   clearDraftThread: (threadRef: ComposerThreadTarget) => void;
+  /**
+   * Writes a draft another client owns into this one. Replaces the text,
+   * model and mode the writing device shared, and keeps this device's images
+   * and captured contexts: those never left this machine, so the remote copy
+   * has nothing to say about them.
+   *
+   * Takes the logical project slot only when nothing else holds it, so an
+   * adopted draft becomes this device's "resume" draft for that project
+   * without displacing one the user is already working on here.
+   */
+  applyRemoteDraft: (input: {
+    draftId: DraftId;
+    logicalProjectKey: string;
+    session: DraftSessionState;
+    composer: RemoteComposerDraftContent;
+  }) => void;
   setStickyModelSelection: (modelSelection: ModelSelection | null | undefined) => void;
   setPrompt: (threadRef: ComposerThreadTarget, prompt: string) => void;
   setTerminalContexts: (threadRef: ComposerThreadTarget, contexts: TerminalContextDraft[]) => void;
@@ -594,7 +625,7 @@ function cloneModelSelection(selection: ModelSelection): DeepMutable<ModelSelect
   } as DeepMutable<ModelSelection>;
 }
 
-function compactModelSelectionByProvider(
+export function compactModelSelectionByProvider(
   selections: Partial<Record<ProviderInstanceId, ModelSelection>>,
 ): DeepMutable<Record<ProviderInstanceId, ModelSelection>> {
   const entries: Array<[string, DeepMutable<ModelSelection>]> = [];
@@ -2605,6 +2636,51 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               return state;
             }
             return removeDraftThreadReferences(state, threadKey);
+          });
+        },
+        applyRemoteDraft: ({ draftId, logicalProjectKey, session, composer }) => {
+          const normalizedLogicalProjectKey = logicalProjectDraftKey(logicalProjectKey);
+          if (draftId.length === 0) {
+            return;
+          }
+          set((state) => {
+            const existingComposer = state.draftsByThreadKey[draftId] ?? createEmptyThreadDraft();
+            const logicalMappingHolder =
+              normalizedLogicalProjectKey.length === 0
+                ? draftId
+                : (state.logicalProjectDraftThreadKeyByLogicalProjectKey[
+                    normalizedLogicalProjectKey
+                  ] ?? draftId);
+            // The remote copy is authoritative for the whole model selection,
+            // including whether a human picked it, so the local flag is dropped
+            // rather than merged.
+            const { modelSelectionExplicit: _localExplicit, ...retainedComposer } =
+              existingComposer;
+            const { modelSelectionExplicit: remoteExplicit, ...remoteComposer } = composer;
+            return {
+              draftThreadsByThreadKey: {
+                ...state.draftThreadsByThreadKey,
+                [draftId]: session,
+              },
+              draftsByThreadKey: {
+                ...state.draftsByThreadKey,
+                [draftId]: {
+                  ...retainedComposer,
+                  ...remoteComposer,
+                  ...(remoteExplicit === undefined
+                    ? {}
+                    : { modelSelectionExplicit: remoteExplicit }),
+                },
+              },
+              ...(logicalMappingHolder === draftId && normalizedLogicalProjectKey.length > 0
+                ? {
+                    logicalProjectDraftThreadKeyByLogicalProjectKey: {
+                      ...state.logicalProjectDraftThreadKeyByLogicalProjectKey,
+                      [normalizedLogicalProjectKey]: draftId,
+                    },
+                  }
+                : {}),
+            };
           });
         },
         clearDraftThread: (threadRef) => {
