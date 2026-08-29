@@ -14,6 +14,24 @@ On mobile, the model picker shows each OpenCode model's upstream provider, such 
 GitHub Copilot, or OpenCode Zen, beneath its name. Search by that provider name to narrow the list
 when starting a thread or changing an existing thread's model.
 
+## Drafts across your clients
+
+An unsent prompt belongs to the machine that will run it, not to the client you typed it on. Start a
+prompt in one client and it appears in the others connected to that same machine, with its project,
+model, working mode, and branch or worktree choice intact. Discarding it, or sending it, clears it
+everywhere.
+
+Editing the same draft in two places at once is resolved by keeping the version edited most recently.
+A composer you are actively typing in is never overwritten while you have it open; it picks up the
+other client's version once you move on.
+
+Images and other attachments stay on the client where you added them. Other clients show how many
+attachments are waiting elsewhere, so a draft never looks complete when part of it is on another
+machine. Send from the client holding the attachments, or add them again where you are.
+
+Drafts only reach clients that can currently reach that machine. A draft made for a machine that is
+asleep or offline shows up on your other clients once they can see it again.
+
 ## Commands and skills
 
 Type `/` to open the command menu. Type `$` to find and add a skill. Skill rows show their source,
