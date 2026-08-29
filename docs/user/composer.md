@@ -29,6 +29,11 @@ Images and other attachments stay on the client where you added them. Other clie
 attachments are waiting elsewhere, so a draft never looks complete when part of it is on another
 machine. Send from the client holding the attachments, or add them again where you are.
 
+On mobile, the **New task** screen holds one draft per project. If a project has several drafts
+waiting, mobile shows the one edited most recently; the others stay available on web and desktop.
+Mobile also keeps a single model choice per draft, so a draft that travels from mobile carries only
+the model it had selected.
+
 Drafts only reach clients that can currently reach that machine. A draft made for a machine that is
 asleep or offline shows up on your other clients once they can see it again.
 
