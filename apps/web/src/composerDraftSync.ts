@@ -1,5 +1,6 @@
 import {
   draftSignature,
+  isShareableDraftPrompt,
   type DraftWireContent,
   type LocalDraftRecord,
   type SyncedDraftRecord,
@@ -96,8 +97,8 @@ export function toDraftSession(input: {
 
 /**
  * Snapshot every draft session this device holds, in the shape the sync
- * planner reasons about, plus a stand-in for every draft this device has
- * published that no longer exists here.
+ * planner reasons about, plus an unshareable stand-in for every draft this
+ * device has published that no longer exists here.
  *
  * Sessions mid-promotion are left out: their first turn is already starting,
  * and the server retires the draft when the thread lands.
@@ -126,7 +127,8 @@ export function collectLocalDraftRecords(
       draftId: key as DraftId,
       environmentId: session.environmentId,
       signature: draftSignature(toDraftWireContent(session, composer)),
-      hasContent: composerDraftHasUserContent(composer),
+      shareable:
+        composerDraftHasUserContent(composer) && isShareableDraftPrompt(composer?.prompt ?? ""),
     });
   }
   for (const [draftId, record] of syncedDrafts) {
@@ -137,13 +139,22 @@ export function collectLocalDraftRecords(
       draftId,
       environmentId: record.environmentId,
       signature: record.signature,
-      hasContent: false,
+      shareable: false,
     });
   }
   return records;
 }
 
-const SYNCED_DRAFTS_STORAGE_KEY = "t3code:synced-drafts:v1";
+const SYNCED_DRAFTS_STORAGE_PREFIX = "t3code:synced-drafts:v1:";
+
+/**
+ * One key per environment. Every environment runs its own reconciliation loop,
+ * and a shared key would have them read-modify-writing the same value with no
+ * coordination — multi-environment is the normal case here, not the exotic one.
+ */
+function syncedDraftsStorageKey(environmentId: EnvironmentId): string {
+  return `${SYNCED_DRAFTS_STORAGE_PREFIX}${environmentId}`;
+}
 
 /**
  * A pushed draft's bookkeeping, plus the environment that owns it. The owner
@@ -160,12 +171,12 @@ export interface StoredSyncedDraft extends SyncedDraftRecord {
  * same, since after a reload "unchanged since we pushed" and "edited while
  * this client was closed" are indistinguishable without it.
  */
-export function loadSyncedDrafts(): Map<DraftId, StoredSyncedDraft> {
+export function loadSyncedDrafts(environmentId: EnvironmentId): Map<DraftId, StoredSyncedDraft> {
   if (typeof localStorage === "undefined") {
     return new Map();
   }
   try {
-    const raw = localStorage.getItem(SYNCED_DRAFTS_STORAGE_KEY);
+    const raw = localStorage.getItem(syncedDraftsStorageKey(environmentId));
     if (raw === null) {
       return new Map();
     }
@@ -203,12 +214,18 @@ export function loadSyncedDrafts(): Map<DraftId, StoredSyncedDraft> {
   }
 }
 
-export function saveSyncedDrafts(synced: ReadonlyMap<DraftId, StoredSyncedDraft>): void {
+export function saveSyncedDrafts(
+  environmentId: EnvironmentId,
+  synced: ReadonlyMap<DraftId, StoredSyncedDraft>,
+): void {
   if (typeof localStorage === "undefined") {
     return;
   }
   try {
-    localStorage.setItem(SYNCED_DRAFTS_STORAGE_KEY, JSON.stringify(Object.fromEntries(synced)));
+    localStorage.setItem(
+      syncedDraftsStorageKey(environmentId),
+      JSON.stringify(Object.fromEntries(synced)),
+    );
   } catch {
     // A full quota must not break editing; the next push just repeats.
   }

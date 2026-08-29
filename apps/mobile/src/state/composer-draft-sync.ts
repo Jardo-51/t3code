@@ -1,5 +1,6 @@
 import {
   draftSignature,
+  isShareableDraftPrompt,
   type DraftWireContent,
   type LocalDraftRecord,
 } from "@t3tools/client-runtime/state/draft-sync";
@@ -76,7 +77,10 @@ export function toDraftWireContent(input: {
     // selections for providers this phone never chose.
     modelSelectionByProvider: selection === undefined ? {} : { [selection.instanceId]: selection },
     activeProvider: selection?.instanceId ?? null,
-    modelSelectionExplicit: selection !== undefined,
+    // A draft that arrived from elsewhere keeps whatever the flag was there.
+    // Falling back to presence covers drafts written on this phone, where the
+    // only thing that ever sets a selection is the user picking one.
+    modelSelectionExplicit: input.draft.modelSelectionExplicit ?? selection !== undefined,
     deviceOnlyAttachmentCount: input.draft.attachments.length,
   };
 }
@@ -93,6 +97,7 @@ export function toLocalComposerDraft(
   ComposerDraft,
   | "text"
   | "modelSelection"
+  | "modelSelectionExplicit"
   | "runtimeMode"
   | "interactionMode"
   | "workspaceSelection"
@@ -105,6 +110,7 @@ export function toLocalComposerDraft(
   return {
     text: draft.prompt,
     ...(activeSelection === undefined ? {} : { modelSelection: activeSelection }),
+    modelSelectionExplicit: draft.modelSelectionExplicit,
     runtimeMode: draft.runtimeMode,
     interactionMode: draft.interactionMode,
     workspaceSelection: {
@@ -118,8 +124,9 @@ export function toLocalComposerDraft(
 }
 
 /**
- * Snapshot this phone's new-task drafts for one environment, plus a stand-in
- * for every draft it has published that no longer exists here.
+ * Snapshot this phone's new-task drafts for one environment, plus an
+ * unshareable stand-in for every draft it has published that no longer exists
+ * here.
  *
  * The stand-ins matter: emptying a mobile draft deletes it outright, and
  * without a record saying "this was shared and is now gone" the planner would
@@ -154,7 +161,7 @@ export function collectLocalDraftRecords(input: {
           threadId: identity.threadId,
         }),
       ),
-      hasContent: draftHasUserContent(draft),
+      shareable: draftHasUserContent(draft) && isShareableDraftPrompt(draft.text),
     });
   }
 
@@ -166,7 +173,7 @@ export function collectLocalDraftRecords(input: {
       draftId: DraftId.make(draftId),
       environmentId: input.environmentId,
       signature: record.signature,
-      hasContent: false,
+      shareable: false,
     });
   }
 

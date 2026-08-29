@@ -27,7 +27,9 @@ other client's version once you move on.
 
 Images and other attachments stay on the client where you added them. Other clients show how many
 attachments are waiting elsewhere, so a draft never looks complete when part of it is on another
-machine. Send from the client holding the attachments, or add them again where you are.
+machine. Send from the client holding the attachments, or add them again where you are. A draft
+holding an unusually large amount of text — a pasted log or a whole file — also stays put, for the
+same reason: it keeps working where you wrote it, and does not appear on your other clients.
 
 On mobile, the **New task** screen holds one draft per project. If a project has several drafts
 waiting, mobile shows one of them — the one already open on your phone, otherwise the one edited

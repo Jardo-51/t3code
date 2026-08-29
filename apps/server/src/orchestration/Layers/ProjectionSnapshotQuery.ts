@@ -357,8 +357,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const threadBackgroundLiveness = yield* ThreadBackgroundLivenessService;
   // Drafts are a single flat table with no per-thread fan-out, so they read
   // through the repository instead of getting another copy of the same query
-  // here. The repository shares this layer's SQL client, so its reads still
-  // join whatever transaction the caller opened.
+  // here. The repository shares this layer's SQL client, so listing drafts
+  // alongside the other reads puts them in the same transaction — which is
+  // what makes a snapshot's drafts and threads describe one moment.
   const projectionDraftRepository = yield* ProjectionDraftRepository;
   const threadPlanProgress = yield* ThreadPlanProgressService;
   const sql = yield* SqlClient.SqlClient;
@@ -1534,6 +1535,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               ),
             ),
           ),
+          projectionDraftRepository.list(),
         ]),
       )
       .pipe(
@@ -1548,6 +1550,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             checkpointRows,
             latestTurnRows,
             stateRows,
+            draftRows,
           ]) =>
             Effect.gen(function* () {
               const messagesByThread = new Map<string, Array<OrchestrationMessage>>();
@@ -1734,11 +1737,15 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 session: sessionsByThread.get(row.threadId) ?? null,
               }));
 
+              for (const draft of draftRows) {
+                updatedAt = maxIso(updatedAt, draft.updatedAt);
+              }
+
               const snapshot = {
                 snapshotSequence: computeSnapshotSequence(stateRows),
                 projects,
                 threads,
-                drafts: yield* projectionDraftRepository.list(),
+                drafts: draftRows,
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               };
 
@@ -1809,12 +1816,21 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
               ),
             ),
           ),
+          projectionDraftRepository.list(),
         ]),
       )
       .pipe(
         Effect.flatMap(
-          ([projectRows, threadRows, proposedPlanRows, sessionRows, latestTurnRows, stateRows]) =>
-            Effect.gen(function* () {
+          ([
+            projectRows,
+            threadRows,
+            proposedPlanRows,
+            sessionRows,
+            latestTurnRows,
+            stateRows,
+            draftRows,
+          ]) =>
+            Effect.sync(() => {
               let updatedAt: string | null = null;
               const projects: OrchestrationProject[] = [];
               const threads: OrchestrationThread[] = [];
@@ -1947,11 +1963,15 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 });
               }
 
+              for (const draft of draftRows) {
+                updatedAt = maxIso(updatedAt, draft.updatedAt);
+              }
+
               return {
                 snapshotSequence: computeSnapshotSequence(stateRows),
                 projects,
                 threads,
-                drafts: yield* projectionDraftRepository.list(),
+                drafts: draftRows,
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               } satisfies OrchestrationReadModel;
             }),

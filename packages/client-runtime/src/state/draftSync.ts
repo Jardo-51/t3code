@@ -1,3 +1,4 @@
+import { DRAFT_PROMPT_MAX_LENGTH } from "@t3tools/contracts";
 import type { DraftId, EnvironmentId, OrchestrationDraft } from "@t3tools/contracts";
 
 /**
@@ -9,10 +10,23 @@ export interface LocalDraftRecord {
   readonly environmentId: EnvironmentId;
   readonly signature: string;
   /**
-   * Whether the user has invested content worth syncing. An empty composer is
-   * not a draft — it is the blank state every project starts in.
+   * Whether this draft belongs on the other clients at all. False for an empty
+   * composer, which is the blank state every project starts in rather than a
+   * draft, and for one too large to share — see `isShareableDraftPrompt`.
+   *
+   * A draft that stops being shareable is withdrawn from the other clients
+   * rather than left there stale, which is also how discarding works.
    */
-  readonly hasContent: boolean;
+  readonly shareable: boolean;
+}
+
+/**
+ * Whether a prompt is small enough to publish. Oversized drafts keep working
+ * locally; they just stay on the device holding them, the same way their
+ * attachments do.
+ */
+export function isShareableDraftPrompt(prompt: string): boolean {
+  return prompt.length <= DRAFT_PROMPT_MAX_LENGTH;
 }
 
 /**
@@ -86,7 +100,7 @@ export function planDraftSync(input: {
   for (const local of locals) {
     const synced = input.syncedDrafts.get(local.draftId);
 
-    if (!local.hasContent) {
+    if (!local.shareable) {
       // Emptying a draft is how the user discards it. Only say so for drafts
       // other devices actually know about.
       if (synced !== undefined) {

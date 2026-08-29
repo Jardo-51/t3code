@@ -103,26 +103,40 @@ function EnvironmentDraftSync(props: { readonly environmentId: EnvironmentId }) 
   const commandsRef = useRef({ upsertDraft, discardDraft });
   commandsRef.current = { upsertDraft, discardDraft };
 
+  const routerRef = useRef(router);
+  routerRef.current = router;
+
+  // When the composer last changed, captured as it happens rather than when
+  // the push goes out. Last-write-wins compares these across devices, so a
+  // write delayed by the debounce or a slow link has to still carry the moment
+  // the user typed, or the slower connection would win.
+  const editedAtRef = useRef<string | null>(null);
+
+  // Held across effect runs rather than inside one. `remoteDrafts` changes
+  // identity whenever the server echoes this device's own push, so the effect
+  // re-runs mid-pass; per-run state would let the replacement start a second
+  // pass over the same bookkeeping while the first is still awaiting.
+  const runStateRef = useRef({ running: false, rerunRequested: false });
+
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let running = false;
-    let rerunRequested = false;
+    const runState = runStateRef.current;
     // Object rather than a plain flag so the async loop below observes the
     // unmount that happens between its awaits.
     const lifecycle = { disposed: false };
 
     const run = async () => {
-      if (running) {
+      if (runState.running) {
         // A sync writes to the store, which would re-enter this immediately.
         // Coalesce instead, and take one more pass afterwards so an edit made
         // mid-flight is not left unsent.
-        rerunRequested = true;
+        runState.rerunRequested = true;
         return;
       }
-      running = true;
+      runState.running = true;
       try {
         do {
-          rerunRequested = false;
+          runState.rerunRequested = false;
           await syncEnvironmentDrafts({
             environmentId,
             remoteDrafts: inputsRef.current.remoteDrafts,
@@ -130,11 +144,13 @@ function EnvironmentDraftSync(props: { readonly environmentId: EnvironmentId }) 
             groupingSettings: inputsRef.current.groupingSettings,
             upsertDraft: commandsRef.current.upsertDraft,
             discardDraft: commandsRef.current.discardDraft,
-            editingDraftId: resolveEditingDraftId(router),
+            editingDraftId: resolveEditingDraftId(routerRef.current),
+            editedAt: editedAtRef.current ?? new Date().toISOString(),
           });
-        } while (rerunRequested && !lifecycle.disposed);
+          editedAtRef.current = null;
+        } while (runState.rerunRequested);
       } finally {
-        running = false;
+        runState.running = false;
       }
     };
 
@@ -151,7 +167,10 @@ function EnvironmentDraftSync(props: { readonly environmentId: EnvironmentId }) 
       }, delayMs);
     };
 
-    const unsubscribe = useComposerDraftStore.subscribe(() => schedule(LOCAL_EDIT_DEBOUNCE_MS));
+    const unsubscribe = useComposerDraftStore.subscribe(() => {
+      editedAtRef.current ??= new Date().toISOString();
+      schedule(LOCAL_EDIT_DEBOUNCE_MS);
+    });
     schedule(REMOTE_CHANGE_DEBOUNCE_MS);
 
     return () => {
@@ -161,7 +180,7 @@ function EnvironmentDraftSync(props: { readonly environmentId: EnvironmentId }) 
       }
       unsubscribe();
     };
-  }, [environmentId, remoteDrafts, router]);
+  }, [environmentId, remoteDrafts]);
 
   return null;
 }
@@ -180,6 +199,8 @@ async function syncEnvironmentDrafts(input: {
   readonly upsertDraft: DraftCommand<UpsertDraftInput>;
   readonly discardDraft: DraftCommand<DiscardDraftInput>;
   readonly editingDraftId: DraftId | null;
+  /** When the edits in this pass were made, not when the pass reached the network. */
+  readonly editedAt: string;
 }): Promise<void> {
   const remoteDrafts = input.remoteDrafts;
   if (remoteDrafts === null) {
@@ -189,7 +210,25 @@ async function syncEnvironmentDrafts(input: {
   }
 
   const store = useComposerDraftStore.getState();
-  const synced = loadSyncedDrafts();
+  const synced = loadSyncedDrafts(input.environmentId);
+
+  // Bookkeeping for a draft that exists neither here nor on the server refers
+  // to nothing: it was sent, or discarded from another client. Reaping it
+  // before planning keeps it from becoming a stand-in that retries a discard
+  // for something already gone.
+  let bookkeepingChanged = false;
+  const remoteIds = new Set<string>(remoteDrafts.map((draft) => draft.id));
+  for (const [draftId, record] of synced) {
+    if (record.environmentId !== input.environmentId) {
+      continue;
+    }
+    if (store.draftThreadsByThreadKey[draftId] !== undefined || remoteIds.has(draftId)) {
+      continue;
+    }
+    synced.delete(draftId);
+    bookkeepingChanged = true;
+  }
+
   const localDrafts = collectLocalDraftRecords(store, synced);
   const plan = planDraftSync({
     environmentId: input.environmentId,
@@ -199,25 +238,22 @@ async function syncEnvironmentDrafts(input: {
     editingDraftId: input.editingDraftId,
   });
 
-  let bookkeepingChanged = false;
-
   for (const draftId of plan.push) {
     const session = store.getDraftSession(draftId);
     if (session === null) {
       continue;
     }
     const content = toDraftWireContent(session, store.getComposerDraft(draftId));
-    const editedAt = new Date().toISOString();
     const result = await input.upsertDraft({
       environmentId: input.environmentId,
-      input: { ...content, draftId, createdAt: editedAt },
+      input: { ...content, draftId, createdAt: input.editedAt },
     });
     if (result._tag !== "Success") {
       continue;
     }
     synced.set(draftId, {
       signature: draftSignature(content),
-      updatedAt: editedAt,
+      updatedAt: input.editedAt,
       environmentId: input.environmentId,
     });
     bookkeepingChanged = true;
@@ -226,7 +262,7 @@ async function syncEnvironmentDrafts(input: {
   for (const draftId of plan.discard) {
     const result = await input.discardDraft({
       environmentId: input.environmentId,
-      input: { draftId },
+      input: { draftId, createdAt: input.editedAt },
     });
     if (result._tag !== "Success") {
       continue;
@@ -265,7 +301,7 @@ async function syncEnvironmentDrafts(input: {
   }
 
   if (bookkeepingChanged) {
-    saveSyncedDrafts(synced);
+    saveSyncedDrafts(input.environmentId, synced);
   }
 }
 

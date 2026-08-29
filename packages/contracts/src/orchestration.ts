@@ -497,6 +497,14 @@ export const DraftEnvMode = Schema.Literals(["local", "worktree"]);
 export type DraftEnvMode = typeof DraftEnvMode.Type;
 
 /**
+ * How much prompt text a draft may share. Whole drafts are republished on
+ * every edit pause and fan out to every connected client, so a pasted log or
+ * source file would otherwise be re-broadcast in full each time. Past this the
+ * draft stays on the device holding it, the same way its attachments do.
+ */
+export const DRAFT_PROMPT_MAX_LENGTH = 100_000;
+
+/**
  * An unsent prompt plus the routing choices its first turn will use, owned by
  * the environment that will run it so every client sees the same pending work.
  *
@@ -506,16 +514,17 @@ export type DraftEnvMode = typeof DraftEnvMode.Type;
  * rows that are not threads yet. `threadId` is the id the first turn will
  * claim, allocated up front so attachments and checkpoints can be keyed by it.
  *
- * Only text-shaped content syncs. Images and annotation screenshots stay on
- * the device that captured them, since putting base64 payloads on the shell
- * stream would cost every connected client on every keystroke pause;
- * `deviceOnlyAttachmentCount` is what other clients render so a draft never
- * silently loses attachments it appears to still have.
+ * Only text-shaped content syncs, and only up to `DRAFT_PROMPT_MAX_LENGTH`.
+ * Images and annotation screenshots stay on the device that captured them,
+ * since putting base64 payloads on the shell stream would cost every connected
+ * client on every keystroke pause; `deviceOnlyAttachmentCount` is what other
+ * clients render so a draft never silently loses attachments it appears to
+ * still have.
  */
 const DraftContentFields = {
   projectId: ProjectId,
   threadId: ThreadId,
-  prompt: Schema.String,
+  prompt: Schema.String.check(Schema.isMaxLength(DRAFT_PROMPT_MAX_LENGTH)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),

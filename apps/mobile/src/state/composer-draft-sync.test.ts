@@ -155,7 +155,7 @@ describe("collectLocalDraftRecords", () => {
       syncedDrafts: {},
     });
     expect(records.map((record) => record.draftId)).toEqual([DraftId.make("draft-1")]);
-    expect(records[0]?.hasContent).toBe(true);
+    expect(records[0]?.shareable).toBe(true);
   });
 
   it("stands in for a published draft the user emptied, so it can be discarded", () => {
@@ -177,7 +177,7 @@ describe("collectLocalDraftRecords", () => {
         draftId: DraftId.make("draft-1"),
         environmentId: ENVIRONMENT_ID,
         signature: "sig",
-        hasContent: false,
+        shareable: false,
       },
     ]);
   });

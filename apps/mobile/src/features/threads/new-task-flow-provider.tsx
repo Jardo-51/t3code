@@ -478,7 +478,10 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
         return;
       }
       const selection = options ? { ...option.selection, options } : option.selection;
-      updateComposerDraftSettings(selectedProjectDraftKey, { modelSelection: selection });
+      updateComposerDraftSettings(selectedProjectDraftKey, {
+        modelSelection: selection,
+        modelSelectionExplicit: true,
+      });
       setStickyComposerModelSelection(selection);
     },
     [modelOptions, selectedProjectDraftKey],
@@ -496,6 +499,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
           };
       updateComposerDraftSettings(selectedProjectDraftKey, {
         modelSelection: nextSelection,
+        modelSelectionExplicit: true,
       });
       setStickyComposerModelSelection(nextSelection);
     },

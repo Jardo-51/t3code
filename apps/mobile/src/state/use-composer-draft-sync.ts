@@ -79,36 +79,47 @@ export function useComposerDraftSync(environmentId: EnvironmentId): void {
   const inputsRef = useRef({ remoteDrafts, upsertDraft, discardDraft });
   inputsRef.current = { remoteDrafts, upsertDraft, discardDraft };
 
+  // When the composer last changed, captured as it happens rather than when
+  // the push goes out. Last-write-wins compares these across devices, so a
+  // write delayed by the debounce or a slow link has to still carry the moment
+  // the user typed, or the slower connection would win.
+  const editedAtRef = useRef<string | null>(null);
+  // Held across effect runs: `remoteDrafts` changes identity whenever the
+  // server echoes this phone's own push, so a per-run guard would let the
+  // replacement start a second pass over the same bookkeeping.
+  const runStateRef = useRef({ running: false, rerunRequested: false });
+
   useEffect(() => {
     ensureComposerDraftsLoaded();
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let running = false;
-    let rerunRequested = false;
+    const runState = runStateRef.current;
     // Object rather than a plain flag so the async loop below observes the
     // unmount that happens between its awaits.
     const lifecycle = { disposed: false };
 
     const run = async () => {
-      if (running) {
+      if (runState.running) {
         // A pass writes drafts, which would re-enter this immediately.
         // Coalesce, then take one more pass so an edit made mid-flight is not
         // left unsent.
-        rerunRequested = true;
+        runState.rerunRequested = true;
         return;
       }
-      running = true;
+      runState.running = true;
       try {
         do {
-          rerunRequested = false;
+          runState.rerunRequested = false;
           await syncEnvironmentDrafts({
             environmentId,
             remoteDrafts: inputsRef.current.remoteDrafts,
             upsertDraft: inputsRef.current.upsertDraft,
             discardDraft: inputsRef.current.discardDraft,
+            editedAt: editedAtRef.current ?? new Date().toISOString(),
           });
-        } while (rerunRequested && !lifecycle.disposed);
+          editedAtRef.current = null;
+        } while (runState.rerunRequested);
       } finally {
-        running = false;
+        runState.running = false;
       }
     };
 
@@ -125,9 +136,10 @@ export function useComposerDraftSync(environmentId: EnvironmentId): void {
       }, delayMs);
     };
 
-    const unsubscribe = appAtomRegistry.subscribe(composerDraftsAtom, () =>
-      schedule(LOCAL_EDIT_DEBOUNCE_MS),
-    );
+    const unsubscribe = appAtomRegistry.subscribe(composerDraftsAtom, () => {
+      editedAtRef.current ??= new Date().toISOString();
+      schedule(LOCAL_EDIT_DEBOUNCE_MS);
+    });
     schedule(REMOTE_CHANGE_DEBOUNCE_MS);
 
     return () => {
@@ -145,6 +157,8 @@ async function syncEnvironmentDrafts(input: {
   readonly remoteDrafts: ReadonlyArray<OrchestrationDraft> | null;
   readonly upsertDraft: DraftCommand<UpsertDraftInput>;
   readonly discardDraft: DraftCommand<DiscardDraftInput>;
+  /** When the edits in this pass were made, not when the pass reached the network. */
+  readonly editedAt: string;
 }): Promise<void> {
   if (input.remoteDrafts === null) {
     return;
@@ -164,10 +178,25 @@ async function syncEnvironmentDrafts(input: {
 
   const drafts = appAtomRegistry.get(composerDraftsAtom);
   const synced = { ...appAtomRegistry.get(syncedComposerDraftsAtom) };
-  const remoteDrafts = selectRepresentableRemoteDrafts(
-    input.remoteDrafts,
-    collectHeldDraftIds({ environmentId: input.environmentId, drafts }),
-  );
+  const held = collectHeldDraftIds({ environmentId: input.environmentId, drafts });
+
+  // Bookkeeping for a draft that exists neither here nor on the server refers
+  // to nothing: it was sent, or discarded from another client. Reaping it
+  // before planning keeps it from becoming a stand-in that retries a discard
+  // for something already gone.
+  let bookkeepingChanged = false;
+  const remoteIds = new Set<string>(input.remoteDrafts.map((draft) => draft.id));
+  for (const [draftId, record] of Object.entries(synced)) {
+    if (record.environmentId !== input.environmentId) {
+      continue;
+    }
+    if (held.has(draftId) || remoteIds.has(draftId)) {
+      continue;
+    }
+    delete synced[draftId];
+    bookkeepingChanged = true;
+  }
+
   const plan = planDraftSync({
     environmentId: input.environmentId,
     localDrafts: collectLocalDraftRecords({
@@ -175,7 +204,10 @@ async function syncEnvironmentDrafts(input: {
       drafts,
       syncedDrafts: synced,
     }),
-    remoteDrafts,
+    // The planner gets every remote draft, not the subset mobile can show. A
+    // draft filtered out for presentation is still on the server, and letting
+    // that absence reach the planner would read as a discard.
+    remoteDrafts: input.remoteDrafts,
     syncedDrafts: new Map(
       Object.entries(synced).map(
         ([draftId, record]) =>
@@ -192,8 +224,6 @@ async function syncEnvironmentDrafts(input: {
     editingDraftId: null,
   });
 
-  let bookkeepingChanged = false;
-
   for (const draftId of plan.push) {
     const entry = findDraftById(drafts, draftId);
     if (entry === null) {
@@ -204,10 +234,9 @@ async function syncEnvironmentDrafts(input: {
       projectId: entry.projectId,
       threadId: entry.identity.threadId,
     });
-    const editedAt = new Date().toISOString();
     const result = await input.upsertDraft({
       environmentId: input.environmentId,
-      input: { ...content, draftId, createdAt: editedAt },
+      input: { ...content, draftId, createdAt: input.editedAt },
     });
     if (result._tag !== "Success") {
       continue;
@@ -216,7 +245,7 @@ async function syncEnvironmentDrafts(input: {
       draftKey: entry.draftKey,
       environmentId: input.environmentId,
       signature: draftSignature(content),
-      updatedAt: editedAt,
+      updatedAt: input.editedAt,
     };
     bookkeepingChanged = true;
   }
@@ -224,7 +253,7 @@ async function syncEnvironmentDrafts(input: {
   for (const draftId of plan.discard) {
     const result = await input.discardDraft({
       environmentId: input.environmentId,
-      input: { draftId },
+      input: { draftId, createdAt: input.editedAt },
     });
     if (result._tag !== "Success") {
       continue;
@@ -233,7 +262,9 @@ async function syncEnvironmentDrafts(input: {
     bookkeepingChanged = true;
   }
 
-  for (const draft of plan.applyRemote) {
+  // Mobile has one new-task composer per project, so only one draft per
+  // project can be shown; the rest stay listed on clients that can show them.
+  for (const draft of selectRepresentableRemoteDrafts(plan.applyRemote, held)) {
     const draftKey = newTaskDraftKey(input.environmentId, draft.projectId);
     // One composer per project: a remote draft may not evict typed text that
     // belongs to a different draft. The occupant is published in this same

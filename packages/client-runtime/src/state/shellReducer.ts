@@ -26,6 +26,11 @@ export function applyShellStreamEvent(
       return {
         ...snapshot,
         projects: Arr.filter(snapshot.projects, (p) => p.id !== event.projectId),
+        // Deleting a project retires its drafts server-side without a
+        // `draft-removed` each. Dropping them here rather than fanning out one
+        // event per draft keeps a project with many drafts from paying for its
+        // own deletion in stream traffic.
+        drafts: Arr.filter(snapshot.drafts, (d) => d.projectId !== event.projectId),
         snapshotSequence: event.sequence,
       };
     case "thread-upserted": {

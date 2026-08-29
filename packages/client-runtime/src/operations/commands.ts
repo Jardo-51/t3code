@@ -150,6 +150,10 @@ export const upsertDraft: (input: UpsertDraftInput) => CommandEffect = Effect.fn
   });
 });
 
+/**
+ * Retires the draft. `createdAt` carries the same meaning as on `upsertDraft`:
+ * the moment the user acted, so a discard cannot lose to an edit it followed.
+ */
 export const discardDraft: (input: DiscardDraftInput) => CommandEffect = Effect.fn(
   "EnvironmentCommands.discardDraft",
 )(function* (input) {

@@ -457,18 +457,20 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
     // and rejecting them would surface a failure for work that is already
     // done. The projector treats an unknown draft as nothing to remove.
     case "draft.discard": {
-      const occurredAt = yield* nowIso;
+      // Stamped from the client's clock, like `draft.upsert`. A draft's two
+      // events have to be comparable to each other, and the one that matters
+      // is when the user acted, not when the write reached this process.
       return {
         ...(yield* withEventBase({
           aggregateKind: "draft",
           aggregateId: command.draftId,
-          occurredAt,
+          occurredAt: command.createdAt,
           commandId: command.commandId,
         })),
         type: "draft.discarded",
         payload: {
           draftId: command.draftId,
-          discardedAt: occurredAt,
+          discardedAt: command.createdAt,
         },
       };
     }

@@ -153,8 +153,8 @@ describe("collectLocalDraftRecords", () => {
     });
     const records = collectLocalDraftRecords(useComposerDraftStore.getState(), new Map());
     expect(records).toHaveLength(2);
-    expect(records.find((record) => record.draftId === DRAFT_ID)?.hasContent).toBe(true);
-    expect(records.find((record) => record.draftId === "draft-2")?.hasContent).toBe(false);
+    expect(records.find((record) => record.draftId === DRAFT_ID)?.shareable).toBe(true);
+    expect(records.find((record) => record.draftId === "draft-2")?.shareable).toBe(false);
   });
 
   it("skips a draft whose first turn is already starting", () => {
@@ -189,7 +189,7 @@ describe("collectLocalDraftRecords", () => {
         draftId: DRAFT_ID,
         environmentId: ENVIRONMENT_ID,
         signature: "sig",
-        hasContent: false,
+        shareable: false,
       },
     ]);
   });
@@ -213,7 +213,7 @@ describe("collectLocalDraftRecords", () => {
       ]),
     );
     expect(records).toHaveLength(1);
-    expect(records[0]?.hasContent).toBe(true);
+    expect(records[0]?.shareable).toBe(true);
   });
 });
 

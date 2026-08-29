@@ -140,6 +140,25 @@ describe("applyShellStreamEvent", () => {
       expect(next.projects).toHaveLength(0);
       expect(next.snapshotSequence).toBe(3);
     });
+
+    it("drops the project's drafts, which the server retires without its own event", () => {
+      const snapshotWithDrafts: OrchestrationShellSnapshot = {
+        ...baseSnapshot,
+        projects: [stubProject],
+        drafts: [
+          stubDraft,
+          { ...stubDraft, id: DraftId.make("draft-2"), projectId: ProjectId.make("project-2") },
+        ],
+      };
+
+      const next = applyShellStreamEvent(snapshotWithDrafts, {
+        kind: "project-removed",
+        sequence: 3,
+        projectId: ProjectId.make("project-1"),
+      });
+
+      expect(next.drafts.map((draft) => draft.id)).toEqual([DraftId.make("draft-2")]);
+    });
   });
 
   describe("thread-upserted", () => {

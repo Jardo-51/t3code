@@ -43,6 +43,12 @@ export interface ComposerDraft {
   readonly attachments: ReadonlyArray<DraftComposerImageAttachment>;
   readonly importedShareIds?: ReadonlyArray<string>;
   readonly modelSelection?: ModelSelection;
+  /**
+   * Whether a human picked `modelSelection`, rather than it being seeded from
+   * a project default or a sticky choice. Carried rather than inferred so a
+   * seeded selection stays replaceable after passing through this phone.
+   */
+  readonly modelSelectionExplicit?: boolean;
   readonly runtimeMode?: RuntimeMode;
   readonly interactionMode?: ProviderInteractionMode;
   readonly workspaceSelection?: ComposerDraftWorkspaceSelection;
@@ -75,7 +81,11 @@ export interface ComposerDraftWorkspaceSelection {
 
 export type ComposerDraftSettingsUpdate = Pick<
   ComposerDraft,
-  "modelSelection" | "runtimeMode" | "interactionMode" | "workspaceSelection"
+  | "modelSelection"
+  | "modelSelectionExplicit"
+  | "runtimeMode"
+  | "interactionMode"
+  | "workspaceSelection"
 >;
 
 const ComposerDraftWorkspaceSelectionSchema = Schema.Struct({
@@ -96,6 +106,7 @@ const ComposerDraftSchema = Schema.Struct({
   importedShareIds: Schema.optional(Schema.Array(Schema.String)),
   syncIdentity: Schema.optional(ComposerDraftSyncIdentitySchema),
   modelSelection: Schema.optional(ModelSelectionSchema),
+  modelSelectionExplicit: Schema.optional(Schema.Boolean),
   runtimeMode: Schema.optional(RuntimeModeSchema),
   interactionMode: Schema.optional(ProviderInteractionModeSchema),
   workspaceSelection: Schema.optional(ComposerDraftWorkspaceSelectionSchema),
@@ -566,6 +577,7 @@ export function applyRemoteComposerDraft(
     ComposerDraft,
     | "text"
     | "modelSelection"
+    | "modelSelectionExplicit"
     | "runtimeMode"
     | "interactionMode"
     | "workspaceSelection"
@@ -580,6 +592,10 @@ export function applyRemoteComposerDraft(
         ...existing,
         text: remote.text,
         ...(remote.modelSelection === undefined ? {} : { modelSelection: remote.modelSelection }),
+        // Always taken from the remote copy, including `false`: the flag says
+        // whether a human chose the selection, which is a fact about the draft
+        // rather than about this device.
+        modelSelectionExplicit: remote.modelSelectionExplicit ?? false,
         ...(remote.runtimeMode === undefined ? {} : { runtimeMode: remote.runtimeMode }),
         ...(remote.interactionMode === undefined
           ? {}

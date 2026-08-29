@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  DRAFT_PROMPT_MAX_LENGTH,
   DraftId,
   EnvironmentId,
   ProjectId,
@@ -7,7 +8,12 @@ import {
   type OrchestrationDraft,
 } from "@t3tools/contracts";
 
-import { planDraftSync, type LocalDraftRecord, type SyncedDraftRecord } from "./draftSync.ts";
+import {
+  isShareableDraftPrompt,
+  planDraftSync,
+  type LocalDraftRecord,
+  type SyncedDraftRecord,
+} from "./draftSync.ts";
 
 const ENVIRONMENT_ID = EnvironmentId.make("env-1");
 const OTHER_ENVIRONMENT_ID = EnvironmentId.make("env-2");
@@ -40,7 +46,7 @@ function makeLocal(overrides: Partial<LocalDraftRecord> = {}): LocalDraftRecord 
     draftId: DRAFT_ID,
     environmentId: ENVIRONMENT_ID,
     signature: "sig-local",
-    hasContent: true,
+    shareable: true,
     ...overrides,
   };
 }
@@ -137,7 +143,7 @@ describe("planDraftSync", () => {
   it("discards a shared draft the user emptied", () => {
     const plan = planDraftSync({
       environmentId: ENVIRONMENT_ID,
-      localDrafts: [makeLocal({ hasContent: false })],
+      localDrafts: [makeLocal({ shareable: false })],
       remoteDrafts: [makeRemote()],
       syncedDrafts: synced(),
       editingDraftId: null,
@@ -149,7 +155,7 @@ describe("planDraftSync", () => {
   it("says nothing about an empty draft that was never shared", () => {
     const plan = planDraftSync({
       environmentId: ENVIRONMENT_ID,
-      localDrafts: [makeLocal({ hasContent: false })],
+      localDrafts: [makeLocal({ shareable: false })],
       remoteDrafts: [],
       syncedDrafts: new Map(),
       editingDraftId: null,
@@ -179,6 +185,18 @@ describe("planDraftSync", () => {
     expect(plan.removeLocal).toEqual([]);
   });
 
+  it("withdraws a draft that stopped being shareable", () => {
+    const plan = planDraftSync({
+      environmentId: ENVIRONMENT_ID,
+      localDrafts: [makeLocal({ shareable: false })],
+      remoteDrafts: [makeRemote()],
+      syncedDrafts: synced(),
+      editingDraftId: null,
+    });
+    expect(plan.discard).toEqual([DRAFT_ID]);
+    expect(plan.push).toEqual([]);
+  });
+
   it("ignores drafts belonging to another environment", () => {
     const plan = planDraftSync({
       environmentId: ENVIRONMENT_ID,
@@ -189,5 +207,12 @@ describe("planDraftSync", () => {
     });
     expect(plan.push).toEqual([]);
     expect(plan.removeLocal).toEqual([]);
+  });
+});
+
+describe("isShareableDraftPrompt", () => {
+  it("accepts a prompt at the limit and rejects one past it", () => {
+    expect(isShareableDraftPrompt("x".repeat(DRAFT_PROMPT_MAX_LENGTH))).toBe(true);
+    expect(isShareableDraftPrompt("x".repeat(DRAFT_PROMPT_MAX_LENGTH + 1))).toBe(false);
   });
 });
