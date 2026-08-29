@@ -7,11 +7,7 @@ import {
   type OrchestrationDraft,
 } from "@t3tools/contracts";
 
-import {
-  planDraftSync,
-  type LocalDraftRecord,
-  type SyncedDraftRecord,
-} from "./composerDraftSync.logic";
+import { planDraftSync, type LocalDraftRecord, type SyncedDraftRecord } from "./draftSync.ts";
 
 const ENVIRONMENT_ID = EnvironmentId.make("env-1");
 const OTHER_ENVIRONMENT_ID = EnvironmentId.make("env-2");

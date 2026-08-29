@@ -17,7 +17,7 @@ import {
   toDraftWireContent,
   toRemoteComposerContent,
 } from "../composerDraftSync";
-import { planDraftSync } from "../composerDraftSync.logic";
+import { planDraftSync } from "@t3tools/client-runtime/state/draft-sync";
 import { environmentCatalog } from "../connection/catalog";
 import { useClientSettings } from "../hooks/useSettings";
 import {

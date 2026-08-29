@@ -1,3 +1,9 @@
+import {
+  draftSignature,
+  type DraftWireContent,
+  type LocalDraftRecord,
+  type SyncedDraftRecord,
+} from "@t3tools/client-runtime/state/draft-sync";
 import type { DraftId, EnvironmentId, OrchestrationDraft } from "@t3tools/contracts";
 
 import {
@@ -7,13 +13,6 @@ import {
   type DraftSessionState,
   type RemoteComposerDraftContent,
 } from "./composerDraftStore";
-import type { LocalDraftRecord, SyncedDraftRecord } from "./composerDraftSync.logic";
-
-/**
- * The draft fields that travel between clients. Mirrors `OrchestrationDraft`
- * minus the identity and timestamps the server owns.
- */
-export type DraftWireContent = Omit<OrchestrationDraft, "id" | "createdAt" | "updatedAt">;
 
 /**
  * Everything the user captured that only exists on this device. The count is
@@ -57,30 +56,8 @@ export function toDraftWireContent(
   };
 }
 
-/**
- * Stable hash of everything a push would send. Compared against the last
- * accepted push to decide whether the server is already current, so key order
- * has to be fixed rather than whatever `JSON.stringify` happens to walk.
- */
-export function draftSignature(content: DraftWireContent): string {
-  return JSON.stringify([
-    content.projectId,
-    content.threadId,
-    content.prompt,
-    content.runtimeMode,
-    content.interactionMode,
-    content.branch,
-    content.worktreePath,
-    content.envMode,
-    content.startFromOrigin,
-    Object.entries(content.modelSelectionByProvider)
-      .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .map(([instanceId, selection]) => [instanceId, selection]),
-    content.activeProvider,
-    content.modelSelectionExplicit,
-    content.deviceOnlyAttachmentCount,
-  ]);
-}
+export { draftSignature } from "@t3tools/client-runtime/state/draft-sync";
+export type { DraftWireContent } from "@t3tools/client-runtime/state/draft-sync";
 
 export function toRemoteComposerContent(draft: OrchestrationDraft): RemoteComposerDraftContent {
   return {

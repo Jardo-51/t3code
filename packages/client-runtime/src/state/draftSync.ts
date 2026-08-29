@@ -114,3 +114,36 @@ export function planDraftSync(input: {
 
   return { push, discard, applyRemote, removeLocal };
 }
+
+/**
+ * The draft fields that travel between clients: `OrchestrationDraft` minus the
+ * identity and timestamps the server owns.
+ */
+export type DraftWireContent = Omit<OrchestrationDraft, "id" | "createdAt" | "updatedAt">;
+
+/**
+ * Stable hash of everything a push would send, compared against the last
+ * accepted push to decide whether the server is already current. Both clients
+ * hash the same way, so a draft that moves between them does not look edited
+ * on arrival — which means key order has to be fixed rather than whatever
+ * `JSON.stringify` happens to walk.
+ */
+export function draftSignature(content: DraftWireContent): string {
+  return JSON.stringify([
+    content.projectId,
+    content.threadId,
+    content.prompt,
+    content.runtimeMode,
+    content.interactionMode,
+    content.branch,
+    content.worktreePath,
+    content.envMode,
+    content.startFromOrigin,
+    Object.entries(content.modelSelectionByProvider).toSorted(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0,
+    ),
+    content.activeProvider,
+    content.modelSelectionExplicit,
+    content.deviceOnlyAttachmentCount,
+  ]);
+}
