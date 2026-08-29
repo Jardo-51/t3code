@@ -51,6 +51,8 @@ export type RespondToThreadApprovalInput = CommandInput<"thread.approval.respond
 export type RespondToThreadUserInputInput = CommandInput<"thread.user-input.respond">;
 export type RevertThreadCheckpointInput = CommandInput<"thread.checkpoint.revert">;
 export type StopThreadSessionInput = CommandInput<"thread.session.stop">;
+export type UpsertDraftInput = CommandInput<"draft.upsert">;
+export type DiscardDraftInput = CommandInput<"draft.discard">;
 
 type DispatchTag = typeof ORCHESTRATION_WS_METHODS.dispatchCommand;
 type CommandEffect = Effect.Effect<
@@ -125,6 +127,36 @@ export const createThread: (input: CreateThreadInput) => CommandEffect = Effect.
   return yield* dispatch({
     ...input,
     type: "thread.create",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
+
+/**
+ * Publishes the draft's whole state. `createdAt` is the moment the edit was
+ * made, and callers should pass the time they captured the edit rather than
+ * letting it default, so a write delayed by a slow connection still loses to a
+ * newer edit made on another device.
+ */
+export const upsertDraft: (input: UpsertDraftInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.upsertDraft",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "draft.upsert",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
+
+export const discardDraft: (input: DiscardDraftInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.discardDraft",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "draft.discard",
     commandId: metadata.commandId,
     createdAt: metadata.createdAt,
   });
