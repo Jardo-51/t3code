@@ -19,6 +19,7 @@ import {
   toDraftSession,
   toDraftWireContent,
   toRemoteComposerContent,
+  type StoredSyncedDraft,
 } from "./composerDraftSync";
 
 const ENVIRONMENT_ID = EnvironmentId.make("env-1");
@@ -150,7 +151,7 @@ describe("collectLocalDraftRecords", () => {
         "draft-2": createEmptyThreadDraft(),
       },
     });
-    const records = collectLocalDraftRecords(useComposerDraftStore.getState());
+    const records = collectLocalDraftRecords(useComposerDraftStore.getState(), new Map());
     expect(records).toHaveLength(2);
     expect(records.find((record) => record.draftId === DRAFT_ID)?.hasContent).toBe(true);
     expect(records.find((record) => record.draftId === "draft-2")?.hasContent).toBe(false);
@@ -165,7 +166,54 @@ describe("collectLocalDraftRecords", () => {
       },
       draftsByThreadKey: { [DRAFT_ID]: { ...createEmptyThreadDraft(), prompt: "sent" } },
     });
-    expect(collectLocalDraftRecords(useComposerDraftStore.getState())).toEqual([]);
+    expect(collectLocalDraftRecords(useComposerDraftStore.getState(), new Map())).toEqual([]);
+  });
+
+  it("stands in for a shared draft the user discarded here, so it is not re-adopted", () => {
+    useComposerDraftStore.setState({ draftThreadsByThreadKey: {}, draftsByThreadKey: {} });
+    const records = collectLocalDraftRecords(
+      useComposerDraftStore.getState(),
+      new Map<DraftId, StoredSyncedDraft>([
+        [
+          DRAFT_ID,
+          {
+            signature: "sig",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            environmentId: ENVIRONMENT_ID,
+          },
+        ],
+      ]),
+    );
+    expect(records).toEqual([
+      {
+        draftId: DRAFT_ID,
+        environmentId: ENVIRONMENT_ID,
+        signature: "sig",
+        hasContent: false,
+      },
+    ]);
+  });
+
+  it("prefers the live session over its stand-in", () => {
+    useComposerDraftStore.setState({
+      draftThreadsByThreadKey: { [DRAFT_ID]: session() },
+      draftsByThreadKey: { [DRAFT_ID]: { ...createEmptyThreadDraft(), prompt: "typed" } },
+    });
+    const records = collectLocalDraftRecords(
+      useComposerDraftStore.getState(),
+      new Map<DraftId, StoredSyncedDraft>([
+        [
+          DRAFT_ID,
+          {
+            signature: "stale",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            environmentId: ENVIRONMENT_ID,
+          },
+        ],
+      ]),
+    );
+    expect(records).toHaveLength(1);
+    expect(records[0]?.hasContent).toBe(true);
   });
 });
 

@@ -96,24 +96,48 @@ export function toDraftSession(input: {
 
 /**
  * Snapshot every draft session this device holds, in the shape the sync
- * planner reasons about. Sessions mid-promotion are left out: their first turn
- * is already starting, and the server retires the draft when the thread lands.
+ * planner reasons about, plus a stand-in for every draft this device has
+ * published that no longer exists here.
+ *
+ * Sessions mid-promotion are left out: their first turn is already starting,
+ * and the server retires the draft when the thread lands.
+ *
+ * The stand-ins matter: discarding a draft from the sidebar or from project
+ * settings deletes it outright, and without a record saying "this was shared
+ * and is now gone" the planner would read the server's copy as a draft started
+ * elsewhere and pull it straight back.
  */
-export function collectLocalDraftRecords(state: {
-  readonly draftThreadsByThreadKey: Record<string, DraftSessionState>;
-  readonly draftsByThreadKey: Record<string, ComposerThreadDraftState>;
-}): ReadonlyArray<LocalDraftRecord> {
+export function collectLocalDraftRecords(
+  state: {
+    readonly draftThreadsByThreadKey: Record<string, DraftSessionState>;
+    readonly draftsByThreadKey: Record<string, ComposerThreadDraftState>;
+  },
+  syncedDrafts: ReadonlyMap<DraftId, StoredSyncedDraft>,
+): ReadonlyArray<LocalDraftRecord> {
   const records: LocalDraftRecord[] = [];
+  const seen = new Set<string>();
   for (const [key, session] of Object.entries(state.draftThreadsByThreadKey)) {
     if (session.promotedTo !== undefined && session.promotedTo !== null) {
       continue;
     }
     const composer = state.draftsByThreadKey[key] ?? null;
+    seen.add(key);
     records.push({
       draftId: key as DraftId,
       environmentId: session.environmentId,
       signature: draftSignature(toDraftWireContent(session, composer)),
       hasContent: composerDraftHasUserContent(composer),
+    });
+  }
+  for (const [draftId, record] of syncedDrafts) {
+    if (seen.has(draftId)) {
+      continue;
+    }
+    records.push({
+      draftId,
+      environmentId: record.environmentId,
+      signature: record.signature,
+      hasContent: false,
     });
   }
   return records;
@@ -122,12 +146,21 @@ export function collectLocalDraftRecords(state: {
 const SYNCED_DRAFTS_STORAGE_KEY = "t3code:synced-drafts:v1";
 
 /**
+ * A pushed draft's bookkeeping, plus the environment that owns it. The owner
+ * has to be stored rather than looked up, because the entries that matter most
+ * are the ones whose local draft is already gone.
+ */
+export interface StoredSyncedDraft extends SyncedDraftRecord {
+  readonly environmentId: EnvironmentId;
+}
+
+/**
  * What this device last pushed, per draft. Kept out of the composer store —
  * it is transport bookkeeping, not composer state — but persisted all the
  * same, since after a reload "unchanged since we pushed" and "edited while
  * this client was closed" are indistinguishable without it.
  */
-export function loadSyncedDrafts(): Map<DraftId, SyncedDraftRecord> {
+export function loadSyncedDrafts(): Map<DraftId, StoredSyncedDraft> {
   if (typeof localStorage === "undefined") {
     return new Map();
   }
@@ -140,18 +173,26 @@ export function loadSyncedDrafts(): Map<DraftId, SyncedDraftRecord> {
     if (typeof parsed !== "object" || parsed === null) {
       return new Map();
     }
-    const entries: Array<[DraftId, SyncedDraftRecord]> = [];
+    const entries: Array<[DraftId, StoredSyncedDraft]> = [];
     for (const [draftId, value] of Object.entries(parsed as Record<string, unknown>)) {
       if (typeof value !== "object" || value === null) {
         continue;
       }
-      const record = value as Partial<SyncedDraftRecord>;
-      if (typeof record.signature !== "string" || typeof record.updatedAt !== "string") {
+      const record = value as Partial<StoredSyncedDraft>;
+      if (
+        typeof record.signature !== "string" ||
+        typeof record.updatedAt !== "string" ||
+        typeof record.environmentId !== "string"
+      ) {
         continue;
       }
       entries.push([
         draftId as DraftId,
-        { signature: record.signature, updatedAt: record.updatedAt },
+        {
+          signature: record.signature,
+          updatedAt: record.updatedAt,
+          environmentId: record.environmentId as EnvironmentId,
+        },
       ]);
     }
     return new Map(entries);
@@ -162,7 +203,7 @@ export function loadSyncedDrafts(): Map<DraftId, SyncedDraftRecord> {
   }
 }
 
-export function saveSyncedDrafts(synced: ReadonlyMap<DraftId, SyncedDraftRecord>): void {
+export function saveSyncedDrafts(synced: ReadonlyMap<DraftId, StoredSyncedDraft>): void {
   if (typeof localStorage === "undefined") {
     return;
   }

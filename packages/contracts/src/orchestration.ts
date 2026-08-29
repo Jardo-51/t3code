@@ -1065,8 +1065,9 @@ const DraftUpsertCommand = Schema.Struct({
 
 /**
  * Retires a draft, whether the user discarded it or its first turn started.
- * Discarding is a tombstone rather than a row delete so a client that was
- * offline during the discard cannot resurrect the draft when it reconnects.
+ * The row goes away; a client that was offline during the discard learns of it
+ * by finding the draft missing from the snapshot it resumes against, which is
+ * why clients keep their own record of what they last published.
  */
 const DraftDiscardCommand = Schema.Struct({
   type: Schema.Literal("draft.discard"),

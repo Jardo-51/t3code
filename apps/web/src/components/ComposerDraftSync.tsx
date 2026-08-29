@@ -82,10 +82,14 @@ function EnvironmentDraftSync(props: { readonly environmentId: EnvironmentId }) 
   const groupingSettings = useClientSettings(selectProjectGroupingSettings);
   const router = useRouter();
 
+  // Null until this environment has answered. An environment that has not
+  // loaded yet is not an environment holding no drafts, and reconciling
+  // against the difference would clear this device's drafts on every cold
+  // start and for every machine that is currently unreachable.
   const remoteDrafts = useMemo(
     () =>
       Option.match(shellState.snapshot, {
-        onNone: (): ReadonlyArray<OrchestrationDraft> => [],
+        onNone: (): ReadonlyArray<OrchestrationDraft> | null => null,
         onSome: (snapshot) => snapshot.drafts,
       }),
     [shellState.snapshot],
@@ -170,40 +174,32 @@ function resolveEditingDraftId(router: ReturnType<typeof useRouter>): DraftId | 
 
 async function syncEnvironmentDrafts(input: {
   readonly environmentId: EnvironmentId;
-  readonly remoteDrafts: ReadonlyArray<OrchestrationDraft>;
+  readonly remoteDrafts: ReadonlyArray<OrchestrationDraft> | null;
   readonly projects: ReadonlyArray<EnvironmentProject>;
   readonly groupingSettings: ProjectGroupingSettings;
   readonly upsertDraft: DraftCommand<UpsertDraftInput>;
   readonly discardDraft: DraftCommand<DiscardDraftInput>;
   readonly editingDraftId: DraftId | null;
 }): Promise<void> {
+  const remoteDrafts = input.remoteDrafts;
+  if (remoteDrafts === null) {
+    // Nothing to reconcile against yet, and pruning bookkeeping here would
+    // forget drafts that only the unloaded snapshot knows about.
+    return;
+  }
+
   const store = useComposerDraftStore.getState();
   const synced = loadSyncedDrafts();
-  const localDrafts = collectLocalDraftRecords(store);
+  const localDrafts = collectLocalDraftRecords(store, synced);
   const plan = planDraftSync({
     environmentId: input.environmentId,
     localDrafts,
-    remoteDrafts: input.remoteDrafts,
+    remoteDrafts,
     syncedDrafts: synced,
     editingDraftId: input.editingDraftId,
   });
 
   let bookkeepingChanged = false;
-
-  // A draft that is neither here nor on the server is finished — sent, or
-  // discarded — and its bookkeeping would otherwise accumulate forever.
-  // Drafts owned by another environment still appear in `localDrafts`, so
-  // this only reaps what nothing refers to.
-  const liveDraftIds = new Set<string>([
-    ...localDrafts.map((record) => record.draftId),
-    ...input.remoteDrafts.map((draft) => draft.id),
-  ]);
-  for (const draftId of synced.keys()) {
-    if (!liveDraftIds.has(draftId)) {
-      synced.delete(draftId);
-      bookkeepingChanged = true;
-    }
-  }
 
   for (const draftId of plan.push) {
     const session = store.getDraftSession(draftId);
@@ -219,7 +215,11 @@ async function syncEnvironmentDrafts(input: {
     if (result._tag !== "Success") {
       continue;
     }
-    synced.set(draftId, { signature: draftSignature(content), updatedAt: editedAt });
+    synced.set(draftId, {
+      signature: draftSignature(content),
+      updatedAt: editedAt,
+      environmentId: input.environmentId,
+    });
     bookkeepingChanged = true;
   }
 
@@ -253,6 +253,7 @@ async function syncEnvironmentDrafts(input: {
     synced.set(draft.id, {
       signature: draftSignature(toDraftWireContent(session, applied.getComposerDraft(draft.id))),
       updatedAt: draft.updatedAt,
+      environmentId: input.environmentId,
     });
     bookkeepingChanged = true;
   }

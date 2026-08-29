@@ -8,8 +8,10 @@ import { useEffect, useRef } from "react";
 import { appAtomRegistry } from "./atom-registry";
 import { uuidv4 } from "../lib/uuid";
 import {
+  collectHeldDraftIds,
   collectLocalDraftRecords,
   collectUnidentifiedDraftKeys,
+  draftHasUserContent,
   newTaskDraftKey,
   parseNewTaskDraftKey,
   selectRepresentableRemoteDrafts,
@@ -27,6 +29,7 @@ import {
   setComposerDraftSyncIdentity,
   setSyncedComposerDrafts,
   syncedComposerDraftsAtom,
+  whenComposerDraftsLoaded,
   type ComposerDraft,
   type ComposerDraftSyncIdentity,
   type SyncedComposerDraft,
@@ -52,8 +55,9 @@ type DraftCommand<Input> = (value: {
  * will run them, and adopts the drafts other clients started there.
  *
  * Mobile keeps one new-task draft per project, so a project holding several
- * drafts shows its most recently edited one here while the rest stay listed on
- * clients that can show them all.
+ * drafts shows one of them here — the one this phone already holds, otherwise
+ * the most recently edited — while the rest stay listed on clients that can
+ * show them all.
  */
 export function useComposerDraftSync(environmentId: EnvironmentId): void {
   const shellState = useAtomValue(environmentShell.stateValueAtom(environmentId));
@@ -63,8 +67,12 @@ export function useComposerDraftSync(environmentId: EnvironmentId): void {
   const upsertDraft = useAtomCommand(draftEnvironment.upsert, { reportFailure: false });
   const discardDraft = useAtomCommand(draftEnvironment.discard, { reportFailure: false });
 
+  // Null until this environment has answered. An environment that has not
+  // loaded yet is not an environment holding no drafts, and reconciling
+  // against the difference would clear this phone's drafts every time the app
+  // is opened out of reach of the machine that runs them.
   const remoteDrafts = Option.match(shellState.snapshot, {
-    onNone: (): ReadonlyArray<OrchestrationDraft> => [],
+    onNone: (): ReadonlyArray<OrchestrationDraft> | null => null,
     onSome: (snapshot) => snapshot.drafts,
   });
 
@@ -134,10 +142,17 @@ export function useComposerDraftSync(environmentId: EnvironmentId): void {
 
 async function syncEnvironmentDrafts(input: {
   readonly environmentId: EnvironmentId;
-  readonly remoteDrafts: ReadonlyArray<OrchestrationDraft>;
+  readonly remoteDrafts: ReadonlyArray<OrchestrationDraft> | null;
   readonly upsertDraft: DraftCommand<UpsertDraftInput>;
   readonly discardDraft: DraftCommand<DiscardDraftInput>;
 }): Promise<void> {
+  if (input.remoteDrafts === null) {
+    return;
+  }
+  // Persisted drafts land asynchronously, and a pre-hydration store reads as
+  // an empty phone — which the planner would publish as a round of discards.
+  await whenComposerDraftsLoaded();
+
   // A draft that gained content before anything named it cannot be published,
   // so mint identity first and let the same pass push it.
   for (const draftKey of collectUnidentifiedDraftKeys({
@@ -149,7 +164,10 @@ async function syncEnvironmentDrafts(input: {
 
   const drafts = appAtomRegistry.get(composerDraftsAtom);
   const synced = { ...appAtomRegistry.get(syncedComposerDraftsAtom) };
-  const remoteDrafts = selectRepresentableRemoteDrafts(input.remoteDrafts);
+  const remoteDrafts = selectRepresentableRemoteDrafts(
+    input.remoteDrafts,
+    collectHeldDraftIds({ environmentId: input.environmentId, drafts }),
+  );
   const plan = planDraftSync({
     environmentId: input.environmentId,
     localDrafts: collectLocalDraftRecords({
@@ -217,6 +235,18 @@ async function syncEnvironmentDrafts(input: {
 
   for (const draft of plan.applyRemote) {
     const draftKey = newTaskDraftKey(input.environmentId, draft.projectId);
+    // One composer per project: a remote draft may not evict typed text that
+    // belongs to a different draft. The occupant is published in this same
+    // pass, so nothing is lost by showing it instead.
+    const occupant = appAtomRegistry.get(composerDraftsAtom)[draftKey];
+    if (
+      occupant !== undefined &&
+      occupant.syncIdentity !== undefined &&
+      occupant.syncIdentity.draftId !== draft.id &&
+      draftHasUserContent(occupant)
+    ) {
+      continue;
+    }
     applyRemoteComposerDraft(draftKey, toLocalComposerDraft(draft));
     // Record what this phone now holds rather than what arrived: the local
     // copy keeps its own attachments, so its signature differs from the remote
@@ -240,8 +270,12 @@ async function syncEnvironmentDrafts(input: {
     bookkeepingChanged = true;
   }
 
+  // Read the store again rather than reusing the pre-adoption snapshot: the
+  // loop above rewrote project keys, and a stale lookup would delete the draft
+  // that was just adopted into the key this one used to hold.
+  const adopted = appAtomRegistry.get(composerDraftsAtom);
   for (const draftId of plan.removeLocal) {
-    const entry = findDraftById(drafts, draftId);
+    const entry = findDraftById(adopted, draftId);
     if (entry !== null) {
       clearComposerDraft(entry.draftKey);
     }

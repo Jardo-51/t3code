@@ -9,6 +9,7 @@ import {
 } from "@t3tools/contracts";
 
 import {
+  collectHeldDraftIds,
   collectLocalDraftRecords,
   collectUnidentifiedDraftKeys,
   newTaskDraftKey,
@@ -233,5 +234,53 @@ describe("selectRepresentableRemoteDrafts", () => {
       projectId: ProjectId.make("project-2"),
     });
     expect(selectRepresentableRemoteDrafts([first, second])).toHaveLength(2);
+  });
+
+  it("keeps showing the draft this phone already holds instead of a newer sibling", () => {
+    const held = remoteDraft({
+      id: DraftId.make("draft-held"),
+      updatedAt: "2026-01-01T00:00:10.000Z",
+    });
+    const newer = remoteDraft({
+      id: DraftId.make("draft-new"),
+      updatedAt: "2026-01-01T00:00:40.000Z",
+    });
+    expect(
+      selectRepresentableRemoteDrafts([held, newer], new Set(["draft-held"])).map(
+        (draft) => draft.id,
+      ),
+    ).toEqual([DraftId.make("draft-held")]);
+    expect(
+      selectRepresentableRemoteDrafts([newer, held], new Set(["draft-held"])).map(
+        (draft) => draft.id,
+      ),
+    ).toEqual([DraftId.make("draft-held")]);
+  });
+});
+
+describe("collectHeldDraftIds", () => {
+  it("lists the identified new-task drafts of one environment", () => {
+    expect(
+      collectHeldDraftIds({
+        environmentId: ENVIRONMENT_ID,
+        drafts: {
+          [DRAFT_KEY]: {
+            text: "typed",
+            attachments: [],
+            syncIdentity: { draftId: "draft-1", threadId: "thread-1" },
+          },
+          "new-task:env-2:project-1": {
+            text: "elsewhere",
+            attachments: [],
+            syncIdentity: { draftId: "draft-2", threadId: "thread-2" },
+          },
+          "thread:project-1": {
+            text: "reply",
+            attachments: [],
+            syncIdentity: { draftId: "draft-3", threadId: "thread-3" },
+          },
+        },
+      }),
+    ).toEqual(new Set(["draft-1"]));
   });
 });

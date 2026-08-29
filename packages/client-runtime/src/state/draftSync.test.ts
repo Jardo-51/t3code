@@ -157,6 +157,28 @@ describe("planDraftSync", () => {
     expect(plan).toEqual({ push: [], discard: [], applyRemote: [], removeLocal: [] });
   });
 
+  it("does nothing at all until the environment's snapshot has loaded", () => {
+    const plan = planDraftSync({
+      environmentId: ENVIRONMENT_ID,
+      localDrafts: [makeLocal()],
+      remoteDrafts: null,
+      syncedDrafts: synced(),
+      editingDraftId: null,
+    });
+    expect(plan).toEqual({ push: [], discard: [], applyRemote: [], removeLocal: [] });
+  });
+
+  it("keeps a shared draft while the snapshot is unloaded rather than reading it as discarded", () => {
+    const plan = planDraftSync({
+      environmentId: ENVIRONMENT_ID,
+      localDrafts: [makeLocal()],
+      remoteDrafts: null,
+      syncedDrafts: synced(),
+      editingDraftId: null,
+    });
+    expect(plan.removeLocal).toEqual([]);
+  });
+
   it("ignores drafts belonging to another environment", () => {
     const plan = planDraftSync({
       environmentId: ENVIRONMENT_ID,

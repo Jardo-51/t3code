@@ -394,6 +394,20 @@ export function ensureComposerDraftsLoaded(): void {
     });
 }
 
+/**
+ * Resolves once persisted drafts have merged into the atoms.
+ *
+ * Anything that reconciles drafts against another source has to wait for this:
+ * before hydration the store looks empty, which is indistinguishable from
+ * "this phone holds no drafts" and would read as a discard everywhere else.
+ */
+export async function whenComposerDraftsLoaded(): Promise<void> {
+  ensureComposerDraftsLoaded();
+  if (loadPromise !== null) {
+    await loadPromise;
+  }
+}
+
 function updateComposerDrafts(
   update: (current: Record<string, ComposerDraft>) => Record<string, ComposerDraft>,
 ): void {

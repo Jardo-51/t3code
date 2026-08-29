@@ -30,12 +30,13 @@ attachments are waiting elsewhere, so a draft never looks complete when part of 
 machine. Send from the client holding the attachments, or add them again where you are.
 
 On mobile, the **New task** screen holds one draft per project. If a project has several drafts
-waiting, mobile shows the one edited most recently; the others stay available on web and desktop.
-Mobile also keeps a single model choice per draft, so a draft that travels from mobile carries only
-the model it had selected.
+waiting, mobile shows one of them — the one already open on your phone, otherwise the one edited
+most recently — and the others stay available on web and desktop. Mobile also keeps a single model
+choice per draft, so a draft that travels from mobile carries only the model it had selected.
 
 Drafts only reach clients that can currently reach that machine. A draft made for a machine that is
-asleep or offline shows up on your other clients once they can see it again.
+asleep or offline shows up on your other clients once they can see it again, and a client that
+cannot reach the machine keeps showing the drafts it already has rather than treating them as gone.
 
 ## Commands and skills
 

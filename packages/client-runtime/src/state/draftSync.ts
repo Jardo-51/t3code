@@ -54,14 +54,22 @@ const EMPTY_PLAN: DraftSyncPlan = {
  * exception — the draft the user is typing into is never overwritten, however
  * new the remote copy is, because silently rewriting a focused composer is
  * worse than showing a stale one until they move on.
+ *
+ * `remoteDrafts` is null until this environment's snapshot has loaded. An
+ * environment that has not answered yet is not an environment holding no
+ * drafts, and conflating the two would read every cold start and every
+ * unreachable machine as "everything was discarded elsewhere".
  */
 export function planDraftSync(input: {
   readonly environmentId: EnvironmentId;
   readonly localDrafts: ReadonlyArray<LocalDraftRecord>;
-  readonly remoteDrafts: ReadonlyArray<OrchestrationDraft>;
+  readonly remoteDrafts: ReadonlyArray<OrchestrationDraft> | null;
   readonly syncedDrafts: ReadonlyMap<DraftId, SyncedDraftRecord>;
   readonly editingDraftId: DraftId | null;
 }): DraftSyncPlan {
+  if (input.remoteDrafts === null) {
+    return EMPTY_PLAN;
+  }
   const locals = input.localDrafts.filter((draft) => draft.environmentId === input.environmentId);
   if (locals.length === 0 && input.remoteDrafts.length === 0) {
     return EMPTY_PLAN;

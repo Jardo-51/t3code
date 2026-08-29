@@ -196,18 +196,48 @@ export function collectUnidentifiedDraftKeys(input: {
 
 /**
  * Which remote drafts this phone can show. Mobile keeps one new-task draft per
- * project, so a project holding several drafts is represented by its most
- * recently edited one; the rest stay visible on the clients that can list them.
+ * project, so a project holding several drafts is represented by a single one;
+ * the rest stay visible on the clients that can list them.
+ *
+ * The draft this phone already holds wins over a newer sibling. Picking purely
+ * by recency would let a draft written elsewhere evict the one in front of the
+ * user, and the evicted draft would then look locally discarded.
  */
 export function selectRepresentableRemoteDrafts(
   remoteDrafts: ReadonlyArray<OrchestrationDraft>,
+  heldDraftIds: ReadonlySet<string> = new Set(),
 ): ReadonlyArray<OrchestrationDraft> {
   const byProject = new Map<string, OrchestrationDraft>();
   for (const draft of remoteDrafts) {
     const current = byProject.get(draft.projectId);
-    if (current === undefined || draft.updatedAt > current.updatedAt) {
+    if (current === undefined) {
+      byProject.set(draft.projectId, draft);
+      continue;
+    }
+    if (heldDraftIds.has(current.id)) {
+      continue;
+    }
+    if (heldDraftIds.has(draft.id) || draft.updatedAt > current.updatedAt) {
       byProject.set(draft.projectId, draft);
     }
   }
   return Array.from(byProject.values());
+}
+
+/** The draft ids this phone currently has a new-task composer for. */
+export function collectHeldDraftIds(input: {
+  readonly environmentId: EnvironmentId;
+  readonly drafts: Record<string, ComposerDraft>;
+}): ReadonlySet<string> {
+  const held = new Set<string>();
+  for (const [draftKey, draft] of Object.entries(input.drafts)) {
+    const parsed = parseNewTaskDraftKey(draftKey);
+    if (parsed === null || parsed.environmentId !== input.environmentId) {
+      continue;
+    }
+    if (draft.syncIdentity !== undefined) {
+      held.add(draft.syncIdentity.draftId);
+    }
+  }
+  return held;
 }
