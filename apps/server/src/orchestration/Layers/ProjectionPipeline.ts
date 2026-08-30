@@ -1703,8 +1703,10 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       function* (event, _attachmentSideEffects) {
         switch (event.type) {
           case "draft.upserted":
-            // The upsert itself refuses to overwrite a newer row, so replaying
-            // events out of order cannot resurrect a stale draft.
+            // The upsert refuses to overwrite a newer row, so two upserts
+            // replayed out of order still settle on the later edit. That guard
+            // only fires on conflict: a discard is a row delete, so an upsert
+            // replayed after it inserts afresh rather than losing to it.
             yield* projectionDraftRepository.upsert(event.payload.draft);
             return;
 
