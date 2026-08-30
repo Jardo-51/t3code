@@ -881,6 +881,15 @@ export function removeComposerDraftsForEnvironment(
   );
 }
 
+export function removeSyncedComposerDraftsForEnvironment(
+  syncedDrafts: Record<string, SyncedComposerDraft>,
+  environmentId: EnvironmentId,
+): Record<string, SyncedComposerDraft> {
+  return Object.fromEntries(
+    Object.entries(syncedDrafts).filter(([, record]) => record.environmentId !== environmentId),
+  );
+}
+
 export async function clearComposerDraftsEnvironment(environmentId: EnvironmentId): Promise<void> {
   ensureComposerDraftsLoaded();
   if (loadPromise !== null) {
@@ -891,17 +900,25 @@ export async function clearComposerDraftsEnvironment(environmentId: EnvironmentI
     appAtomRegistry.get(composerDraftsAtom),
     environmentId,
   );
+  // Sync bookkeeping is keyed by draft id, not by draft key, so it does not
+  // fall out with the drafts above. The environment that owned these drafts is
+  // gone and its sync worker has unmounted, so nothing would ever reap them.
+  const nextSynced = removeSyncedComposerDraftsForEnvironment(
+    appAtomRegistry.get(syncedComposerDraftsAtom),
+    environmentId,
+  );
 
   if (persistTimer !== null) {
     clearTimeout(persistTimer);
     persistTimer = null;
   }
   appAtomRegistry.set(composerDraftsAtom, next);
+  appAtomRegistry.set(syncedComposerDraftsAtom, nextSynced);
   await persistenceQueue.run(() =>
     writePersistedComposerState(
       next,
       appAtomRegistry.get(stickyComposerModelSelectionAtom),
-      appAtomRegistry.get(syncedComposerDraftsAtom),
+      nextSynced,
     ),
   );
 }
