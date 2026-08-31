@@ -242,6 +242,21 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("keeps memories as a singleton surface alongside agents", () => {
+    useRightPanelStore.getState().open(refA, "memories");
+    useRightPanelStore.getState().open(refA, "agents");
+    useRightPanelStore.getState().open(refA, "memories");
+
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "memories",
+      surfaces: [
+        { id: "memories", kind: "memories" },
+        { id: "agents", kind: "agents" },
+      ],
+    });
+  });
+
   it("keeps files as a singleton surface", () => {
     useRightPanelStore.getState().open(refA, "files");
     useRightPanelStore.getState().open(refA, "files");

@@ -207,3 +207,41 @@ describe("projectActivityPayload", () => {
     expect(projected.payload).toEqual(source.payload);
   });
 });
+
+describe("projectActivityPayload file paths", () => {
+  it("carries a snake_case file_path through to the wire", () => {
+    const projected = projectActivityPayload(
+      activity({
+        itemType: "file_change",
+        status: "completed",
+        data: {
+          toolName: "Write",
+          input: {
+            file_path: "/home/dev/.claude/projects/-repo/memory/prefers-tabs.md",
+            content: "---\nname: prefers-tabs\n---\n",
+          },
+        },
+      }),
+    );
+    const data = (projected.payload as Record<string, unknown>).data as Record<string, unknown>;
+    expect(data.files).toEqual([
+      { path: "/home/dev/.claude/projects/-repo/memory/prefers-tabs.md" },
+    ]);
+  });
+
+  it("carries a notebook_path and dedupes it against a repeated edit target", () => {
+    const projected = projectActivityPayload(
+      activity({
+        itemType: "file_change",
+        status: "completed",
+        data: {
+          toolName: "NotebookEdit",
+          input: { notebook_path: "/repo/analysis.ipynb" },
+          result: { notebook_path: "/repo/analysis.ipynb" },
+        },
+      }),
+    );
+    const data = (projected.payload as Record<string, unknown>).data as Record<string, unknown>;
+    expect(data.files).toEqual([{ path: "/repo/analysis.ipynb" }]);
+  });
+});

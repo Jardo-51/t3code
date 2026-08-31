@@ -53,6 +53,11 @@ function collectChangedFiles(
 
   pushChangedFile(target, seen, record.path);
   pushChangedFile(target, seen, record.filePath);
+  // Claude and OpenCode spell tool inputs in snake_case, so a file change that
+  // only carries `file_path` used to reach clients with no path at all: the
+  // full input is dropped here and `detail` truncates at 180 chars.
+  pushChangedFile(target, seen, record.file_path);
+  pushChangedFile(target, seen, record.notebook_path);
   pushChangedFile(target, seen, record.relativePath);
   pushChangedFile(target, seen, record.filename);
   pushChangedFile(target, seen, record.newPath);
