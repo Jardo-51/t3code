@@ -63,6 +63,14 @@ export const EMPTY_MEMORY_PANEL_MODEL: MemoryPanelModel = {
  */
 const INSTRUCTION_FILENAMES = new Set(["agents.md", "claude.md", ".cursorrules"]);
 
+/**
+ * Cursor keeps durable project rules as separate files under `.cursor/rules`
+ * rather than in one instructions file, so the directory is the marker.
+ */
+const INSTRUCTION_DIRECTORY_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  [".cursor", "rules"],
+];
+
 /** Directory segment every file-based memory store nests its entries under. */
 const MEMORY_DIRECTORY_SEGMENTS = new Set(["memory", "memories"]);
 
@@ -90,12 +98,20 @@ export function classifyMemoryPath(path: string): MemoryFileKind | null {
   }
   const lowerName = name.toLowerCase();
 
-  if (
-    segments.slice(0, -1).some((segment) => MEMORY_DIRECTORY_SEGMENTS.has(segment.toLowerCase()))
-  ) {
+  const directories = segments.slice(0, -1).map((segment) => segment.toLowerCase());
+
+  if (directories.some((segment) => MEMORY_DIRECTORY_SEGMENTS.has(segment))) {
     return MEMORY_INDEX_FILENAMES.has(lowerName) ? "index" : "entry";
   }
   if (INSTRUCTION_FILENAMES.has(lowerName)) {
+    return "instructions";
+  }
+  if (
+    INSTRUCTION_DIRECTORY_PAIRS.some(([outer, inner]) => {
+      const outerIndex = directories.indexOf(outer);
+      return outerIndex !== -1 && directories.indexOf(inner, outerIndex + 1) !== -1;
+    })
+  ) {
     return "instructions";
   }
   return null;

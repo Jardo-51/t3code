@@ -245,3 +245,76 @@ describe("projectActivityPayload file paths", () => {
     expect(data.files).toEqual([{ path: "/repo/analysis.ipynb" }]);
   });
 });
+
+/**
+ * One case per provider shape, because each spells the changed path
+ * differently and a missed container silently empties the Files list and the
+ * Memories surface for that provider alone.
+ */
+describe("projectActivityPayload provider file-change shapes", () => {
+  const pathsOf = (activity: OrchestrationThreadActivity) => {
+    const data = (projectActivityPayload(activity).payload as Record<string, unknown>)
+      .data as Record<string, unknown>;
+    return (data.files as ReadonlyArray<{ path: string }> | undefined)?.map((file) => file.path);
+  };
+
+  it("Codex: data.changes[].path", () => {
+    expect(
+      pathsOf(
+        activity({
+          itemType: "file_change",
+          data: {
+            changes: [
+              { path: "/repo/src/a.ts", kind: "update", diff: "@@" },
+              { path: "/home/dev/.codex/memory/api-quirk.md", kind: "add", diff: "@@" },
+            ],
+          },
+        }),
+      ),
+    ).toEqual(["/repo/src/a.ts", "/home/dev/.codex/memory/api-quirk.md"]);
+  });
+
+  it("Claude: data.input.file_path", () => {
+    expect(
+      pathsOf(
+        activity({
+          itemType: "file_change",
+          data: { toolName: "Write", input: { file_path: "/repo/AGENTS.md" } },
+        }),
+      ),
+    ).toEqual(["/repo/AGENTS.md"]);
+  });
+
+  it("ACP (Cursor, Grok): data.locations[].path and data.rawInput", () => {
+    expect(
+      pathsOf(
+        activity({
+          itemType: "file_change",
+          data: {
+            toolCallId: "call-1",
+            rawInput: { file_path: "/repo/.cursor/memory/style.md" },
+            locations: [{ path: "/repo/.cursor/memory/style.md", line: 1 }],
+          },
+        }),
+      ),
+    ).toEqual(["/repo/.cursor/memory/style.md"]);
+  });
+
+  it("OpenCode: data.state.input.filePath", () => {
+    expect(
+      pathsOf(
+        activity({
+          itemType: "file_change",
+          data: {
+            tool: "edit",
+            state: {
+              status: "completed",
+              input: { filePath: "/repo/memory/deploy-steps.md" },
+              output: "done",
+            },
+          },
+        }),
+      ),
+    ).toEqual(["/repo/memory/deploy-steps.md"]);
+  });
+});

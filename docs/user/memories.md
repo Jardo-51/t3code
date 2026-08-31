@@ -39,8 +39,16 @@ rather than for one of them:
 - Any file written inside a `memory/` or `memories/` directory, wherever that directory lives. This
   covers relocated memory stores and remote environments with a different home directory.
 - `AGENTS.md`, `CLAUDE.md`, and `.cursorrules` anywhere, since those hold durable knowledge too.
+- Files under `.cursor/rules/`, which is Cursor's equivalent of a single instructions file.
 
 Files that failed to write, or that you declined, are not listed.
+
+### One provider exception
+
+Codex can consolidate memory in a hidden background thread of its own. T3 Code deliberately keeps
+that background activity out of your conversation, so those writes produce nothing for this surface
+to show. Memories Codex writes as part of the visible conversation — editing `AGENTS.md`, or a file
+in a memory directory — appear normally.
 
 ## Reading contents
 

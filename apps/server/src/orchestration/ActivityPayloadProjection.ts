@@ -67,6 +67,13 @@ function collectChangedFiles(
     "item",
     "result",
     "input",
+    // ACP providers (Cursor, Grok) put the tool arguments under `rawInput` and
+    // the touched files under `locations: [{ path }]`; OpenCode nests its whole
+    // tool state under `state`, with the arguments at `state.input`. Without
+    // these hops their file changes reach clients with no path at all.
+    "rawInput",
+    "locations",
+    "state",
     "data",
     "changes",
     "files",

@@ -50,6 +50,13 @@ describe("classifyMemoryPath", () => {
     expect(classifyMemoryPath("/repo/apps/web/CLAUDE.md")).toBe("instructions");
   });
 
+  it("counts Cursor project rules, which are a directory rather than one file", () => {
+    expect(classifyMemoryPath("/repo/.cursor/rules/testing.mdc")).toBe("instructions");
+    expect(classifyMemoryPath("/repo/.cursorrules")).toBe("instructions");
+    // A `rules` directory on its own is ordinary application code.
+    expect(classifyMemoryPath("/repo/src/rules/pricing.ts")).toBeNull();
+  });
+
   it("ignores ordinary source and doc writes", () => {
     expect(classifyMemoryPath("/repo/src/index.ts")).toBeNull();
     expect(classifyMemoryPath("/repo/docs/architecture.md")).toBeNull();
