@@ -42,6 +42,10 @@ A single user-to-assistant work cycle inside a thread. It starts with user input
 
 A user-visible log item attached to a thread. In [the contracts][1], activities cover important non-message events like approvals, tool actions, and failures. They are projected into thread state in [projector.ts][4].
 
+#### Memory
+
+A file an agent writes to persist knowledge across threads. Nothing in the protocol announces one: providers save memories through ordinary file tools, so T3 Code recognizes a memory by the path it lands at — inside a `memory/` or `memories/` directory, or an agent-instructions file such as `AGENTS.md`. The Memories right-panel surface folds a thread's `file_change` activities into that list client-side, the same way the Agents surface folds `task.*` activities. See [memoryRuntime.ts](../../packages/client-runtime/src/state/memoryRuntime.ts) and [docs/user/memories.md](../user/memories.md).
+
 ### Orchestration
 
 Orchestration is the server-side domain layer that turns runtime activity into stable app state. The main entry point is [OrchestrationEngine.ts][7], with core logic in [decider.ts][8] and [projector.ts][4].

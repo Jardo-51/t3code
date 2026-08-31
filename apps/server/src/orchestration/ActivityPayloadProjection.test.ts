@@ -207,3 +207,168 @@ describe("projectActivityPayload", () => {
     expect(projected.payload).toEqual(source.payload);
   });
 });
+
+describe("projectActivityPayload file paths", () => {
+  it("carries a snake_case file_path through to the wire", () => {
+    const projected = projectActivityPayload(
+      activity({
+        itemType: "file_change",
+        status: "completed",
+        data: {
+          toolName: "Write",
+          input: {
+            file_path: "/home/dev/.claude/projects/-repo/memory/prefers-tabs.md",
+            content: "---\nname: prefers-tabs\n---\n",
+          },
+        },
+      }),
+    );
+    const data = (projected.payload as Record<string, unknown>).data as Record<string, unknown>;
+    expect(data.files).toEqual([
+      { path: "/home/dev/.claude/projects/-repo/memory/prefers-tabs.md" },
+    ]);
+  });
+
+  it("carries a notebook_path and dedupes it against a repeated edit target", () => {
+    const projected = projectActivityPayload(
+      activity({
+        itemType: "file_change",
+        status: "completed",
+        data: {
+          toolName: "NotebookEdit",
+          input: { notebook_path: "/repo/analysis.ipynb" },
+          result: { notebook_path: "/repo/analysis.ipynb" },
+        },
+      }),
+    );
+    const data = (projected.payload as Record<string, unknown>).data as Record<string, unknown>;
+    expect(data.files).toEqual([{ path: "/repo/analysis.ipynb" }]);
+  });
+});
+
+/**
+ * One case per provider shape, because each spells the changed path
+ * differently and a missed container silently empties the Files list and the
+ * Memories surface for that provider alone.
+ */
+describe("projectActivityPayload provider file-change shapes", () => {
+  const pathsOf = (activity: OrchestrationThreadActivity) => {
+    const data = (projectActivityPayload(activity).payload as Record<string, unknown>)
+      .data as Record<string, unknown>;
+    return (data.files as ReadonlyArray<{ path: string }> | undefined)?.map((file) => file.path);
+  };
+
+  it("Codex: data.changes[].path", () => {
+    expect(
+      pathsOf(
+        activity({
+          itemType: "file_change",
+          data: {
+            changes: [
+              { path: "/repo/src/a.ts", kind: "update", diff: "@@" },
+              { path: "/home/dev/.codex/memory/api-quirk.md", kind: "add", diff: "@@" },
+            ],
+          },
+        }),
+      ),
+    ).toEqual(["/repo/src/a.ts", "/home/dev/.codex/memory/api-quirk.md"]);
+  });
+
+  it("Claude: data.input.file_path", () => {
+    expect(
+      pathsOf(
+        activity({
+          itemType: "file_change",
+          data: { toolName: "Write", input: { file_path: "/repo/AGENTS.md" } },
+        }),
+      ),
+    ).toEqual(["/repo/AGENTS.md"]);
+  });
+
+  it("ACP (Cursor, Grok): data.locations[].path and data.rawInput", () => {
+    expect(
+      pathsOf(
+        activity({
+          itemType: "file_change",
+          data: {
+            toolCallId: "call-1",
+            rawInput: { file_path: "/repo/.cursor/memory/style.md" },
+            locations: [{ path: "/repo/.cursor/memory/style.md", line: 1 }],
+          },
+        }),
+      ),
+    ).toEqual(["/repo/.cursor/memory/style.md"]);
+  });
+
+  it("OpenCode: data.state.input.filePath", () => {
+    expect(
+      pathsOf(
+        activity({
+          itemType: "file_change",
+          data: {
+            tool: "edit",
+            state: {
+              status: "completed",
+              input: { filePath: "/repo/memory/deploy-steps.md" },
+              output: "done",
+            },
+          },
+        }),
+      ),
+    ).toEqual(["/repo/memory/deploy-steps.md"]);
+  });
+});
+
+/**
+ * Wire-cost guard: streaming updates are emitted per chunk and persisted in
+ * projected form, so the widened path walk must not run on them. A completion
+ * supersedes its own updates and carries the authoritative paths.
+ */
+describe("projectActivityPayload streaming cost", () => {
+  const claudeWrite = (kind: string) =>
+    ({
+      id: "activity-1",
+      tone: "tool",
+      kind,
+      summary: "File change",
+      payload: {
+        itemType: "file_change",
+        data: { toolName: "Write", input: { file_path: "/repo/big/file.ts" } },
+      },
+      turnId: null,
+      createdAt: "2026-08-01T10:00:00.000Z",
+    }) as unknown as OrchestrationThreadActivity;
+
+  const filesOf = (activity: OrchestrationThreadActivity) =>
+    (
+      (projectActivityPayload(activity).payload as Record<string, unknown>).data as Record<
+        string,
+        unknown
+      >
+    ).files;
+
+  it("omits widened paths from tool.updated", () => {
+    expect(filesOf(claudeWrite("tool.updated"))).toBeUndefined();
+  });
+
+  it("still carries them on tool.completed and tool.started", () => {
+    expect(filesOf(claudeWrite("tool.completed"))).toEqual([{ path: "/repo/big/file.ts" }]);
+    expect(filesOf(claudeWrite("tool.started"))).toEqual([{ path: "/repo/big/file.ts" }]);
+  });
+
+  it("keeps Codex paths on updates, which already had them", () => {
+    const codexUpdate = {
+      id: "activity-2",
+      tone: "tool",
+      kind: "tool.updated",
+      summary: "File change",
+      payload: {
+        itemType: "file_change",
+        data: { changes: [{ path: "/repo/src/a.ts", kind: "update", diff: "@@" }] },
+      },
+      turnId: null,
+      createdAt: "2026-08-01T10:00:00.000Z",
+    } as unknown as OrchestrationThreadActivity;
+    expect(filesOf(codexUpdate)).toEqual([{ path: "/repo/src/a.ts" }]);
+  });
+});

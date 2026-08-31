@@ -1,6 +1,7 @@
 import type { ContextMenuItem, PreviewSessionSnapshot, PullRequestState } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
+  BookMarked,
   Bot,
   FileDiff,
   Files,
@@ -74,15 +75,19 @@ interface RightPanelTabsProps {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  onAddMemories: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   agentsAvailable: boolean;
+  memoriesAvailable: boolean;
   pullRequestStatuses?: Readonly<Record<string, PullRequestTabStatus>>;
   /** Running + waiting subagents; badges the Agents card in the empty state. */
   liveAgentCount: number;
+  /** Memory files saved in this thread; badges the Memories card the same way. */
+  newMemoryCount: number;
   children: ReactNode;
 }
 
@@ -101,6 +106,7 @@ const SURFACE_DISABLED_REASONS = {
   diff: "Diff is only available for server threads in Git repositories.",
   pullRequest: "This thread's branch has no pull request yet.",
   agents: "Agents are only available from a thread.",
+  memories: "Memories are only available from a thread.",
 } as const;
 
 /** Overlays that must win over the launcher's letter shortcuts. */
@@ -123,6 +129,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
   agents: "Available from a thread.",
+  memories: "Available from a thread.",
 } as const;
 
 type TabContextMenuAction =
@@ -252,13 +259,16 @@ function RightPanelEmptyState(props: {
   onAddFiles: () => void;
   onAddPullRequest: () => void;
   onAddAgents: () => void;
+  onAddMemories: () => void;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
   pullRequestAvailable: boolean;
   agentsAvailable: boolean;
+  memoriesAvailable: boolean;
   liveAgentCount: number;
+  newMemoryCount: number;
 }) {
   // -1 means no highlight: it only appears on hover or arrow use.
   const [highlight, setHighlight] = useState(-1);
@@ -323,6 +333,16 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.agents,
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
+    },
+    {
+      label: "Memories",
+      description: "Read what the agent saved to memory.",
+      icon: BookMarked,
+      shortcut: "M",
+      available: props.memoriesAvailable,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.memories,
+      onClick: props.onAddMemories,
+      badgeCount: props.newMemoryCount,
     },
   ] as const;
 
@@ -508,6 +528,8 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "agents":
       return "Agents";
+    case "memories":
+      return "Memories";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -593,6 +615,8 @@ function SurfaceIcon({
     }
     case "agents":
       return <Bot className="size-3 shrink-0" />;
+    case "memories":
+      return <BookMarked className="size-3 shrink-0" />;
   }
 }
 
@@ -650,6 +674,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.agentsAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.agents,
       onClick: props.onAddAgents,
+    },
+    {
+      label: "Memories",
+      icon: BookMarked,
+      shortcut: "M",
+      available: props.memoriesAvailable,
+      disabledReason: SURFACE_DISABLED_REASONS.memories,
+      onClick: props.onAddMemories,
     },
   ] as const;
 
@@ -938,13 +970,16 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
             onAddAgents={props.onAddAgents}
+            onAddMemories={props.onAddMemories}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}
             filesAvailable={props.filesAvailable}
             pullRequestAvailable={props.pullRequestAvailable}
             agentsAvailable={props.agentsAvailable}
+            memoriesAvailable={props.memoriesAvailable}
             liveAgentCount={props.liveAgentCount}
+            newMemoryCount={props.newMemoryCount}
           />
         ) : (
           props.children

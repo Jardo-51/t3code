@@ -109,13 +109,16 @@ function renderTabs(
       onAddDiff={() => undefined}
       onAddFiles={() => undefined}
       onAddAgents={() => undefined}
+      onAddMemories={() => undefined}
       liveAgentCount={0}
+      newMemoryCount={0}
       browserAvailable
       terminalAvailable={false}
       diffAvailable={false}
       filesAvailable={false}
       pullRequestAvailable={false}
       agentsAvailable={false}
+      memoriesAvailable={false}
     >
       <div>content</div>
     </RightPanelTabs>,

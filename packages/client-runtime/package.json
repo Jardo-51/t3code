@@ -139,6 +139,10 @@
       "types": "./src/state/subagentRuntime.ts",
       "default": "./src/state/subagentRuntime.ts"
     },
+    "./state/memoryRuntime": {
+      "types": "./src/state/memoryRuntime.ts",
+      "default": "./src/state/memoryRuntime.ts"
+    },
     "./state/thread-sort": {
       "types": "./src/state/threadSort.ts",
       "default": "./src/state/threadSort.ts"
