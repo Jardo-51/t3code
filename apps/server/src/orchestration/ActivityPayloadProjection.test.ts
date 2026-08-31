@@ -318,3 +318,57 @@ describe("projectActivityPayload provider file-change shapes", () => {
     ).toEqual(["/repo/memory/deploy-steps.md"]);
   });
 });
+
+/**
+ * Wire-cost guard: streaming updates are emitted per chunk and persisted in
+ * projected form, so the widened path walk must not run on them. A completion
+ * supersedes its own updates and carries the authoritative paths.
+ */
+describe("projectActivityPayload streaming cost", () => {
+  const claudeWrite = (kind: string) =>
+    ({
+      id: "activity-1",
+      tone: "tool",
+      kind,
+      summary: "File change",
+      payload: {
+        itemType: "file_change",
+        data: { toolName: "Write", input: { file_path: "/repo/big/file.ts" } },
+      },
+      turnId: null,
+      createdAt: "2026-08-01T10:00:00.000Z",
+    }) as unknown as OrchestrationThreadActivity;
+
+  const filesOf = (activity: OrchestrationThreadActivity) =>
+    (
+      (projectActivityPayload(activity).payload as Record<string, unknown>).data as Record<
+        string,
+        unknown
+      >
+    ).files;
+
+  it("omits widened paths from tool.updated", () => {
+    expect(filesOf(claudeWrite("tool.updated"))).toBeUndefined();
+  });
+
+  it("still carries them on tool.completed and tool.started", () => {
+    expect(filesOf(claudeWrite("tool.completed"))).toEqual([{ path: "/repo/big/file.ts" }]);
+    expect(filesOf(claudeWrite("tool.started"))).toEqual([{ path: "/repo/big/file.ts" }]);
+  });
+
+  it("keeps Codex paths on updates, which already had them", () => {
+    const codexUpdate = {
+      id: "activity-2",
+      tone: "tool",
+      kind: "tool.updated",
+      summary: "File change",
+      payload: {
+        itemType: "file_change",
+        data: { changes: [{ path: "/repo/src/a.ts", kind: "update", diff: "@@" }] },
+      },
+      turnId: null,
+      createdAt: "2026-08-01T10:00:00.000Z",
+    } as unknown as OrchestrationThreadActivity;
+    expect(filesOf(codexUpdate)).toEqual([{ path: "/repo/src/a.ts" }]);
+  });
+});

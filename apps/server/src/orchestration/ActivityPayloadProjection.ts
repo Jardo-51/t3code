@@ -27,18 +27,53 @@ function pushChangedFile(target: string[], seen: Set<string>, value: unknown): v
   target.push(normalized);
 }
 
+/**
+ * Path spellings and containers that were always collected. Codex reaches its
+ * files through these (`data.changes[].path`), so it keeps paths on every
+ * streaming chunk exactly as before.
+ */
+const NARROW_PATH_KEYS = ["path", "filePath", "relativePath", "filename", "newPath", "oldPath"];
+const NARROW_NESTED_KEYS = [
+  "item",
+  "result",
+  "input",
+  "data",
+  "changes",
+  "files",
+  "edits",
+  "patch",
+  "patches",
+  "operations",
+];
+
+/**
+ * The rest of the providers. Claude spells its input `file_path`; ACP (Cursor,
+ * Grok) puts arguments under `rawInput` and touched files under
+ * `locations: [{ path }]`; OpenCode nests its tool state under `state`, with
+ * the arguments at `state.input`.
+ *
+ * These are collected on terminal and start activities only, never on
+ * `tool.updated`. An adapter emits one update per streaming chunk and the
+ * projected form of those is what gets persisted, so paying for the same path
+ * on every chunk would cost far more than the feature that reads it — and no
+ * reader needs it there, since a completion supersedes its own updates.
+ */
+const WIDE_PATH_KEYS = [...NARROW_PATH_KEYS, "file_path", "notebook_path"];
+const WIDE_NESTED_KEYS = [...NARROW_NESTED_KEYS, "rawInput", "locations", "state"];
+
 function collectChangedFiles(
   value: unknown,
   target: string[],
   seen: Set<string>,
   depth: number,
+  wide: boolean,
 ): void {
   if (depth > 4 || target.length >= 12) {
     return;
   }
   if (Array.isArray(value)) {
     for (const entry of value) {
-      collectChangedFiles(entry, target, seen, depth + 1);
+      collectChangedFiles(entry, target, seen, depth + 1, wide);
       if (target.length >= 12) {
         return;
       }
@@ -51,41 +86,15 @@ function collectChangedFiles(
     return;
   }
 
-  pushChangedFile(target, seen, record.path);
-  pushChangedFile(target, seen, record.filePath);
-  // Claude and OpenCode spell tool inputs in snake_case, so a file change that
-  // only carries `file_path` used to reach clients with no path at all: the
-  // full input is dropped here and `detail` truncates at 180 chars.
-  pushChangedFile(target, seen, record.file_path);
-  pushChangedFile(target, seen, record.notebook_path);
-  pushChangedFile(target, seen, record.relativePath);
-  pushChangedFile(target, seen, record.filename);
-  pushChangedFile(target, seen, record.newPath);
-  pushChangedFile(target, seen, record.oldPath);
+  for (const pathKey of wide ? WIDE_PATH_KEYS : NARROW_PATH_KEYS) {
+    pushChangedFile(target, seen, record[pathKey]);
+  }
 
-  for (const nestedKey of [
-    "item",
-    "result",
-    "input",
-    // ACP providers (Cursor, Grok) put the tool arguments under `rawInput` and
-    // the touched files under `locations: [{ path }]`; OpenCode nests its whole
-    // tool state under `state`, with the arguments at `state.input`. Without
-    // these hops their file changes reach clients with no path at all.
-    "rawInput",
-    "locations",
-    "state",
-    "data",
-    "changes",
-    "files",
-    "edits",
-    "patch",
-    "patches",
-    "operations",
-  ]) {
+  for (const nestedKey of wide ? WIDE_NESTED_KEYS : NARROW_NESTED_KEYS) {
     if (!(nestedKey in record)) {
       continue;
     }
-    collectChangedFiles(record[nestedKey], target, seen, depth + 1);
+    collectChangedFiles(record[nestedKey], target, seen, depth + 1, wide);
     if (target.length >= 12) {
       return;
     }
@@ -235,7 +244,10 @@ function summarizeMcpResult(result: unknown): Record<string, unknown> | undefine
  * keep the expanded-row UI working. Keep the fields the UI actually renders
  * and summarize the result like regular tool output.
  */
-function projectMcpToolCallData(data: Record<string, unknown>): Record<string, unknown> {
+function projectMcpToolCallData(
+  data: Record<string, unknown>,
+  wide: boolean,
+): Record<string, unknown> {
   const projectedData: Record<string, unknown> = {};
 
   const item = asRecord(data.item);
@@ -274,7 +286,7 @@ function projectMcpToolCallData(data: Record<string, unknown>): Record<string, u
   }
 
   const changedFiles: string[] = [];
-  collectChangedFiles(data, changedFiles, new Set<string>(), 0);
+  collectChangedFiles(data, changedFiles, new Set<string>(), 0, wide);
   if (changedFiles.length > 0) {
     projectedData.files = changedFiles.map((path) => ({ path }));
   }
@@ -354,6 +366,11 @@ export function projectActivityPayload(
     return activity;
   }
 
+  // Streaming updates are emitted per chunk and persisted in projected form,
+  // so they stay on the pre-existing narrow walk; a completion supersedes its
+  // own updates and carries the authoritative paths.
+  const wide = activity.kind !== "tool.updated";
+
   const itemStatus = asRecord(data.item)?.status;
   const projectedPayload =
     payload.status === "completed" && (itemStatus === "failed" || itemStatus === "declined")
@@ -365,7 +382,7 @@ export function projectActivityPayload(
       ...activity,
       payload: {
         ...projectedPayload,
-        data: projectMcpToolCallData(data),
+        data: projectMcpToolCallData(data, wide),
       },
     };
   }
@@ -381,7 +398,7 @@ export function projectActivityPayload(
   }
 
   const changedFiles: string[] = [];
-  collectChangedFiles(data, changedFiles, new Set<string>(), 0);
+  collectChangedFiles(data, changedFiles, new Set<string>(), 0, wide);
   if (changedFiles.length > 0) {
     // Both clients discover file names by walking objects with path-like keys.
     projectedData.files = changedFiles.map((path) => ({ path }));
