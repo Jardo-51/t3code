@@ -10,6 +10,7 @@ import {
   CheckpointRef,
   ClientSurface,
   CommandId,
+  DraftId,
   EventId,
   IsoDateTime,
   MessageId,
@@ -487,10 +488,76 @@ export const OrchestrationThread = Schema.Struct({
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 
+/**
+ * Where a draft's first turn will run. Unlike `ThreadEnvMode` this choice is
+ * still editable, and it stops existing once the turn starts and the thread
+ * has a real worktree.
+ */
+export const DraftEnvMode = Schema.Literals(["local", "worktree"]);
+export type DraftEnvMode = typeof DraftEnvMode.Type;
+
+/**
+ * How much prompt text a draft may share. Whole drafts are republished on
+ * every edit pause and fan out to every connected client, so a pasted log or
+ * source file would otherwise be re-broadcast in full each time. Past this the
+ * draft stays on the device holding it, the same way its attachments do.
+ */
+export const DRAFT_PROMPT_MAX_LENGTH = 100_000;
+
+/**
+ * An unsent prompt plus the routing choices its first turn will use, owned by
+ * the environment that will run it so every client sees the same pending work.
+ *
+ * A draft is its own aggregate rather than a thread that has not started:
+ * `envMode` and `startFromOrigin` are bootstrap-only choices with no meaning
+ * after the first turn, and every thread list would otherwise have to exclude
+ * rows that are not threads yet. `threadId` is the id the first turn will
+ * claim, allocated up front so attachments and checkpoints can be keyed by it.
+ *
+ * Only text-shaped content syncs, and only up to `DRAFT_PROMPT_MAX_LENGTH`.
+ * Images and annotation screenshots stay on the device that captured them,
+ * since putting base64 payloads on the shell stream would cost every connected
+ * client on every keystroke pause; `deviceOnlyAttachmentCount` is what other
+ * clients render so a draft never silently loses attachments it appears to
+ * still have.
+ */
+const DraftContentFields = {
+  projectId: ProjectId,
+  threadId: ThreadId,
+  prompt: Schema.String.check(Schema.isMaxLength(DRAFT_PROMPT_MAX_LENGTH)),
+  runtimeMode: RuntimeMode,
+  interactionMode: ProviderInteractionMode,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  envMode: DraftEnvMode,
+  startFromOrigin: Schema.Boolean,
+  // Keyed by `ProviderInstanceId` so a default `codex` instance and a
+  // user-authored `codex_personal` each keep their own selected model.
+  modelSelectionByProvider: Schema.Record(ProviderInstanceId, ModelSelection),
+  activeProvider: Schema.NullOr(ProviderInstanceId),
+  // True only when a human picked the selection. Seeded selections (project
+  // default / sticky) stay replaceable by a later seed on any client.
+  modelSelectionExplicit: Schema.Boolean,
+  deviceOnlyAttachmentCount: NonNegativeInt,
+} as const;
+
+export const OrchestrationDraft = Schema.Struct({
+  id: DraftId,
+  ...DraftContentFields,
+  createdAt: IsoDateTime,
+  // Stamped by the editing client. Concurrent edits resolve last-write-wins on
+  // this value, so a client whose clock runs behind can lose an edit it made
+  // after another device's — acceptable for text a human is watching, and the
+  // alternative (server stamping) lets a stale queued write beat a newer edit.
+  updatedAt: IsoDateTime,
+});
+export type OrchestrationDraft = typeof OrchestrationDraft.Type;
+
 export const OrchestrationReadModel = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProject),
   threads: Schema.Array(OrchestrationThread),
+  drafts: Schema.Array(OrchestrationDraft).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationReadModel = typeof OrchestrationReadModel.Type;
@@ -569,6 +636,8 @@ export const OrchestrationShellSnapshot = Schema.Struct({
   snapshotSequence: NonNegativeInt,
   projects: Schema.Array(OrchestrationProjectShell),
   threads: Schema.Array(OrchestrationThreadShell),
+  // Defaulted so a snapshot cached before drafts synced still decodes.
+  drafts: Schema.Array(OrchestrationDraft).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationShellSnapshot = typeof OrchestrationShellSnapshot.Type;
@@ -593,6 +662,16 @@ export const OrchestrationShellStreamEvent = Schema.Union([
     kind: Schema.Literal("thread-removed"),
     sequence: NonNegativeInt,
     threadId: ThreadId,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("draft-upserted"),
+    sequence: NonNegativeInt,
+    draft: OrchestrationDraft,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("draft-removed"),
+    sequence: NonNegativeInt,
+    draftId: DraftId,
   }),
 ]);
 export type OrchestrationShellStreamEvent = typeof OrchestrationShellStreamEvent.Type;
@@ -978,6 +1057,34 @@ const ThreadSessionStopCommand = Schema.Struct({
   onlyIfSettled: Schema.optional(Schema.Boolean),
 });
 
+/**
+ * Creates or replaces a draft wholesale. There is no partial-update command:
+ * a composer edit is one indivisible state, and merging per-field updates from
+ * two clients would let a deletion on one device lose to a stale keystroke on
+ * the other. `createdAt` is the moment the edit was made and becomes the
+ * draft's `updatedAt`.
+ */
+const DraftUpsertCommand = Schema.Struct({
+  type: Schema.Literal("draft.upsert"),
+  commandId: CommandId,
+  draftId: DraftId,
+  ...DraftContentFields,
+  createdAt: IsoDateTime,
+});
+
+/**
+ * Retires a draft, whether the user discarded it or its first turn started.
+ * The row goes away; a client that was offline during the discard learns of it
+ * by finding the draft missing from the snapshot it resumes against, which is
+ * why clients keep their own record of what they last published.
+ */
+const DraftDiscardCommand = Schema.Struct({
+  type: Schema.Literal("draft.discard"),
+  commandId: CommandId,
+  draftId: DraftId,
+  createdAt: IsoDateTime,
+});
+
 const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
@@ -1002,6 +1109,8 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
+  DraftUpsertCommand,
+  DraftDiscardCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -1030,6 +1139,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
+  DraftUpsertCommand,
+  DraftDiscardCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -1154,10 +1265,12 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.proposed-plan-upserted",
   "thread.turn-diff-completed",
   "thread.activity-appended",
+  "draft.upserted",
+  "draft.discarded",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
-export const OrchestrationAggregateKind = Schema.Literals(["project", "thread"]);
+export const OrchestrationAggregateKind = Schema.Literals(["project", "thread", "draft"]);
 export type OrchestrationAggregateKind = typeof OrchestrationAggregateKind.Type;
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
 
@@ -1390,6 +1503,20 @@ export const ThreadActivityAppendedPayload = Schema.Struct({
 });
 
 /**
+ * The draft's whole state after the edit. Carrying the full record rather than
+ * a patch is what makes replay and last-write-wins resolution the same
+ * operation: the projector takes the newer record and keeps nothing else.
+ */
+export const DraftUpsertedPayload = Schema.Struct({
+  draft: OrchestrationDraft,
+});
+
+export const DraftDiscardedPayload = Schema.Struct({
+  draftId: DraftId,
+  discardedAt: IsoDateTime,
+});
+
+/**
  * Which client connection dispatched the command that produced an event.
  * Stamped by the orchestration engine on client-dispatched commands; absent on
  * provider/server-originated events and on commands from clients too old to
@@ -1415,7 +1542,7 @@ const EventBaseFields = {
   sequence: NonNegativeInt,
   eventId: EventId,
   aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId]),
+  aggregateId: Schema.Union([ProjectId, ThreadId, DraftId]),
   occurredAt: IsoDateTime,
   commandId: Schema.NullOr(CommandId),
   causationEventId: Schema.NullOr(EventId),
@@ -1568,6 +1695,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.activity-appended"),
     payload: ThreadActivityAppendedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("draft.upserted"),
+    payload: DraftUpsertedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("draft.discarded"),
+    payload: DraftDiscardedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

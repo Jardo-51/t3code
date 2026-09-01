@@ -11,6 +11,8 @@ import type * as PlatformError from "effect/PlatformError";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
+  findDraftById,
+  findDraftByThreadId,
   listThreadsByProjectId,
   requireActiveProjectWorkspaceRootAbsent,
   requireProject,
@@ -360,14 +362,14 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
-      return {
+      const createdEvent = {
         ...(yield* withEventBase({
-          aggregateKind: "thread",
+          aggregateKind: "thread" as const,
           aggregateId: command.threadId,
           occurredAt: command.createdAt,
           commandId: command.commandId,
         })),
-        type: "thread.created",
+        type: "thread.created" as const,
         payload: {
           threadId: command.threadId,
           projectId: command.projectId,
@@ -379,6 +381,96 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           worktreePath: command.worktreePath,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
+        },
+      };
+
+      // The draft holding this thread's id has just become the thread, so it
+      // retires here rather than waiting for the sending client to dispatch a
+      // second command it might never get to. Discarding in the same command
+      // is also what lets every other client drop the row in one round trip.
+      const promotedDraft = findDraftByThreadId(readModel, command.threadId);
+      if (promotedDraft === undefined) {
+        return createdEvent;
+      }
+      return [
+        createdEvent,
+        {
+          ...(yield* withEventBase({
+            aggregateKind: "draft" as const,
+            aggregateId: promotedDraft.id,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          })),
+          type: "draft.discarded" as const,
+          payload: {
+            draftId: promotedDraft.id,
+            discardedAt: command.createdAt,
+          },
+        },
+      ];
+    }
+
+    case "draft.upsert": {
+      yield* requireProject({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      // A draft whose thread already exists was sent from another client while
+      // this write was in flight. Accepting it would resurrect the draft as a
+      // row nothing can ever discard, since the sending client has already
+      // moved on to the thread.
+      yield* requireThreadAbsent({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const existing = findDraftById(readModel, command.draftId);
+      const {
+        commandId: _commandId,
+        createdAt: editedAt,
+        draftId,
+        type: _type,
+        ...content
+      } = command;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "draft",
+          aggregateId: draftId,
+          occurredAt: editedAt,
+          commandId: command.commandId,
+        })),
+        type: "draft.upserted",
+        payload: {
+          draft: {
+            id: draftId,
+            ...content,
+            createdAt: existing?.createdAt ?? editedAt,
+            updatedAt: editedAt,
+          },
+        },
+      };
+    }
+
+    // Deliberately unconditional. Concurrent discards, and discards from a
+    // client that never saw the draft created, are races rather than errors,
+    // and rejecting them would surface a failure for work that is already
+    // done. The projector treats an unknown draft as nothing to remove.
+    case "draft.discard": {
+      // Stamped from the client's clock, like `draft.upsert`. A draft's two
+      // events have to be comparable to each other, and the one that matters
+      // is when the user acted, not when the write reached this process.
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "draft",
+          aggregateId: command.draftId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "draft.discarded",
+        payload: {
+          draftId: command.draftId,
+          discardedAt: command.createdAt,
         },
       };
     }

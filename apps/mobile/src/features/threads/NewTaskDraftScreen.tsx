@@ -773,7 +773,9 @@ export function NewTaskDraftScreen(props: {
               createdAt: editingPendingTask.createdAt,
             },
           }
-        : {}),
+        : draft.syncIdentity
+          ? { draftThreadId: draft.syncIdentity.threadId }
+          : {}),
     });
     flow.setSubmitting(false);
 

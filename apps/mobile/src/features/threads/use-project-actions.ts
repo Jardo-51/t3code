@@ -39,8 +39,18 @@ export function useCreateProjectThread() {
       readonly initialAttachments: ReadonlyArray<DraftComposerImageAttachment>;
       /** Reuse identifiers from a queued pending task instead of minting new ones. */
       readonly turnMetadata?: TurnCommandMetadata;
+      /**
+       * Thread id already reserved by a synced draft. Claiming it here is what
+       * lets the server retire that draft on every other client the moment the
+       * thread is created, instead of waiting for this one to say so.
+       */
+      readonly draftThreadId?: string;
     }) => {
-      const metadata = input.turnMetadata ?? makeTurnCommandMetadata();
+      const minted = input.turnMetadata ?? makeTurnCommandMetadata();
+      const metadata =
+        input.turnMetadata === undefined && input.draftThreadId !== undefined
+          ? { ...minted, threadId: input.draftThreadId }
+          : minted;
       const threadId = ThreadId.make(metadata.threadId);
       const initialMessageText = input.initialMessageText.trim();
 

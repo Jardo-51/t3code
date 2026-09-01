@@ -43,9 +43,27 @@ export interface ComposerDraft {
   readonly attachments: ReadonlyArray<DraftComposerImageAttachment>;
   readonly importedShareIds?: ReadonlyArray<string>;
   readonly modelSelection?: ModelSelection;
+  /**
+   * Whether a human picked `modelSelection`, rather than it being seeded from
+   * a project default or a sticky choice. Carried rather than inferred so a
+   * seeded selection stays replaceable after passing through this phone.
+   */
+  readonly modelSelectionExplicit?: boolean;
   readonly runtimeMode?: RuntimeMode;
   readonly interactionMode?: ProviderInteractionMode;
   readonly workspaceSelection?: ComposerDraftWorkspaceSelection;
+  /**
+   * Identity this draft carries on the environment that will run it, minted
+   * once the draft has content worth sharing. The thread id is the one this
+   * draft's first turn claims, which is what lets the server retire the draft
+   * on every other client the moment it is sent.
+   */
+  readonly syncIdentity?: ComposerDraftSyncIdentity;
+}
+
+export interface ComposerDraftSyncIdentity {
+  readonly draftId: string;
+  readonly threadId: string;
 }
 
 export interface ComposerDraftContent {
@@ -63,7 +81,11 @@ export interface ComposerDraftWorkspaceSelection {
 
 export type ComposerDraftSettingsUpdate = Pick<
   ComposerDraft,
-  "modelSelection" | "runtimeMode" | "interactionMode" | "workspaceSelection"
+  | "modelSelection"
+  | "modelSelectionExplicit"
+  | "runtimeMode"
+  | "interactionMode"
+  | "workspaceSelection"
 >;
 
 const ComposerDraftWorkspaceSelectionSchema = Schema.Struct({
@@ -73,20 +95,43 @@ const ComposerDraftWorkspaceSelectionSchema = Schema.Struct({
   startFromOrigin: Schema.optional(Schema.Boolean),
 });
 
+const ComposerDraftSyncIdentitySchema = Schema.Struct({
+  draftId: Schema.String,
+  threadId: Schema.String,
+});
+
 const ComposerDraftSchema = Schema.Struct({
   text: Schema.String,
   attachments: Schema.Array(DraftComposerImageAttachmentSchema),
   importedShareIds: Schema.optional(Schema.Array(Schema.String)),
+  syncIdentity: Schema.optional(ComposerDraftSyncIdentitySchema),
   modelSelection: Schema.optional(ModelSelectionSchema),
+  modelSelectionExplicit: Schema.optional(Schema.Boolean),
   runtimeMode: Schema.optional(RuntimeModeSchema),
   interactionMode: Schema.optional(ProviderInteractionModeSchema),
   workspaceSelection: Schema.optional(ComposerDraftWorkspaceSelectionSchema),
 });
 
+/**
+ * What this device last published for a draft, keyed by draft id. Lives in the
+ * composer document rather than a file of its own so it lands in the same
+ * atomic write as the draft it describes — a bookkeeping entry that survives a
+ * crash its draft did not would claim the server is current when it is not.
+ */
+const SyncedComposerDraftSchema = Schema.Struct({
+  draftKey: Schema.String,
+  environmentId: Schema.String,
+  signature: Schema.String,
+  updatedAt: Schema.String,
+});
+
+export type SyncedComposerDraft = typeof SyncedComposerDraftSchema.Type;
+
 const PersistedComposerDraftsSchema = Schema.Struct({
   schemaVersion: Schema.Literal(COMPOSER_DRAFTS_SCHEMA_VERSION),
   drafts: Schema.Record(Schema.String, ComposerDraftSchema),
   stickyModelSelection: Schema.optional(ModelSelectionSchema),
+  syncedDrafts: Schema.optional(Schema.Record(Schema.String, SyncedComposerDraftSchema)),
 });
 
 const decodePersistedComposerDraftsDocument = Schema.decodeUnknownSync(
@@ -101,6 +146,11 @@ const EMPTY_DRAFT: ComposerDraft = {
 export const composerDraftsAtom = Atom.make<Record<string, ComposerDraft>>({}).pipe(
   Atom.keepAlive,
   Atom.withLabel("mobile:composer-drafts"),
+);
+
+export const syncedComposerDraftsAtom = Atom.make<Record<string, SyncedComposerDraft>>({}).pipe(
+  Atom.keepAlive,
+  Atom.withLabel("mobile:synced-composer-drafts"),
 );
 
 export const stickyComposerModelSelectionAtom = Atom.make<ModelSelection | null>(null).pipe(
@@ -150,6 +200,7 @@ function isEmptyDraft(draft: ComposerDraft): boolean {
 export function decodePersistedComposerState(value: unknown): {
   readonly drafts: Record<string, ComposerDraft>;
   readonly stickyModelSelection: ModelSelection | null;
+  readonly syncedDrafts: Record<string, SyncedComposerDraft>;
 } {
   const parsed = decodePersistedComposerDraftsDocument(value);
   return {
@@ -182,6 +233,7 @@ export function decodePersistedComposerState(value: unknown): {
         .filter(([, draft]) => !isEmptyDraft(draft) || (draft.importedShareIds?.length ?? 0) > 0),
     ),
     stickyModelSelection: parsed.stickyModelSelection ?? null,
+    syncedDrafts: parsed.syncedDrafts ?? {},
   };
 }
 
@@ -199,12 +251,13 @@ async function getComposerDraftsFile() {
 async function loadPersistedComposerState(): Promise<{
   readonly drafts: Record<string, ComposerDraft>;
   readonly stickyModelSelection: ModelSelection | null;
+  readonly syncedDrafts: Record<string, SyncedComposerDraft>;
 }> {
   let operation: ComposerDraftPersistenceError["operation"] = "open";
   try {
     const file = await getComposerDraftsFile();
     if (!file.exists) {
-      return { drafts: {}, stickyModelSelection: null };
+      return { drafts: {}, stickyModelSelection: null, syncedDrafts: {} };
     }
     operation = "read";
     const raw = await file.text();
@@ -220,13 +273,14 @@ async function loadPersistedComposerState(): Promise<{
         cause,
       }),
     );
-    return { drafts: {}, stickyModelSelection: null };
+    return { drafts: {}, stickyModelSelection: null, syncedDrafts: {} };
   }
 }
 
 async function writePersistedComposerState(
   drafts: Record<string, ComposerDraft>,
   stickyModelSelection: ModelSelection | null,
+  syncedDrafts: Record<string, SyncedComposerDraft>,
 ): Promise<void> {
   let operation: ComposerDraftPersistenceError["operation"] = "open";
   try {
@@ -239,6 +293,7 @@ async function writePersistedComposerState(
       schemaVersion: COMPOSER_DRAFTS_SCHEMA_VERSION,
       drafts: nonEmptyDrafts,
       ...(stickyModelSelection ? { stickyModelSelection } : {}),
+      ...(Object.keys(syncedDrafts).length > 0 ? { syncedDrafts } : {}),
     } as const;
     const encoded = JSON.stringify(document);
     operation = "write";
@@ -275,6 +330,7 @@ export async function flushComposerDrafts(): Promise<void> {
         writePersistedComposerState(
           appAtomRegistry.get(composerDraftsAtom),
           appAtomRegistry.get(stickyComposerModelSelectionAtom),
+          appAtomRegistry.get(syncedComposerDraftsAtom),
         ),
       );
     }
@@ -301,6 +357,7 @@ function schedulePersistComposerState(): void {
         await writePersistedComposerState(
           appAtomRegistry.get(composerDraftsAtom),
           appAtomRegistry.get(stickyComposerModelSelectionAtom),
+          appAtomRegistry.get(syncedComposerDraftsAtom),
         );
       } catch (error) {
         console.warn("[composer-drafts] failed to persist drafts", error);
@@ -329,6 +386,10 @@ export function ensureComposerDraftsLoaded(): void {
       ) {
         appAtomRegistry.set(stickyComposerModelSelectionAtom, persisted.stickyModelSelection);
       }
+      if (Object.keys(persisted.syncedDrafts).length > 0) {
+        const current = appAtomRegistry.get(syncedComposerDraftsAtom);
+        appAtomRegistry.set(syncedComposerDraftsAtom, { ...persisted.syncedDrafts, ...current });
+      }
     })
     .catch((cause) => {
       console.warn(
@@ -342,6 +403,20 @@ export function ensureComposerDraftsLoaded(): void {
       );
       // Draft loading is best-effort; in-memory drafts still keep working.
     });
+}
+
+/**
+ * Resolves once persisted drafts have merged into the atoms.
+ *
+ * Anything that reconciles drafts against another source has to wait for this:
+ * before hydration the store looks empty, which is indistinguishable from
+ * "this phone holds no drafts" and would read as a discard everywhere else.
+ */
+export async function whenComposerDraftsLoaded(): Promise<void> {
+  ensureComposerDraftsLoaded();
+  if (loadPromise !== null) {
+    await loadPromise;
+  }
 }
 
 function updateComposerDrafts(
@@ -470,6 +545,78 @@ export function updateComposerDraftSettings(
       [draftKey]: draft,
     };
   });
+}
+
+/**
+ * Attaches the identity this draft carries on its environment. Never creates a
+ * draft: identity is minted for content that already exists, so a blank
+ * composer stays blank.
+ */
+export function setComposerDraftSyncIdentity(
+  draftKey: string,
+  syncIdentity: ComposerDraftSyncIdentity,
+): void {
+  updateComposerDrafts((current) => {
+    const existing = current[draftKey];
+    if (existing === undefined || existing.syncIdentity !== undefined) {
+      return current;
+    }
+    return { ...current, [draftKey]: { ...existing, syncIdentity } };
+  });
+}
+
+/**
+ * Writes a draft another client owns into this one. Replaces the text, model,
+ * modes and workspace choice it shared, and keeps this device's attachments:
+ * those never left this phone, so the remote copy has nothing to say about
+ * them.
+ */
+export function applyRemoteComposerDraft(
+  draftKey: string,
+  remote: Pick<
+    ComposerDraft,
+    | "text"
+    | "modelSelection"
+    | "modelSelectionExplicit"
+    | "runtimeMode"
+    | "interactionMode"
+    | "workspaceSelection"
+    | "syncIdentity"
+  >,
+): void {
+  updateComposerDrafts((current) => {
+    const existing = normalizeDraft(current[draftKey]);
+    return {
+      ...current,
+      [draftKey]: {
+        ...existing,
+        text: remote.text,
+        ...(remote.modelSelection === undefined ? {} : { modelSelection: remote.modelSelection }),
+        // Always taken from the remote copy, including `false`: the flag says
+        // whether a human chose the selection, which is a fact about the draft
+        // rather than about this device.
+        modelSelectionExplicit: remote.modelSelectionExplicit ?? false,
+        ...(remote.runtimeMode === undefined ? {} : { runtimeMode: remote.runtimeMode }),
+        ...(remote.interactionMode === undefined
+          ? {}
+          : { interactionMode: remote.interactionMode }),
+        ...(remote.workspaceSelection === undefined
+          ? {}
+          : { workspaceSelection: remote.workspaceSelection }),
+        ...(remote.syncIdentity === undefined ? {} : { syncIdentity: remote.syncIdentity }),
+      },
+    };
+  });
+}
+
+/** Records what this device last published, for the next reconciliation pass. */
+export function setSyncedComposerDrafts(next: Record<string, SyncedComposerDraft>): void {
+  const current = appAtomRegistry.get(syncedComposerDraftsAtom);
+  if (next === current) {
+    return;
+  }
+  appAtomRegistry.set(syncedComposerDraftsAtom, next);
+  schedulePersistComposerState();
 }
 
 export function clearComposerDraftContentState(
@@ -662,7 +809,11 @@ export async function mergeComposerDraftContent(
     appAtomRegistry.set(composerDraftsAtom, next);
   }
   await persistenceQueue.run(() =>
-    writePersistedComposerState(next, appAtomRegistry.get(stickyComposerModelSelectionAtom)),
+    writePersistedComposerState(
+      next,
+      appAtomRegistry.get(stickyComposerModelSelectionAtom),
+      appAtomRegistry.get(syncedComposerDraftsAtom),
+    ),
   );
   return { skippedAttachmentCount };
 }
@@ -687,7 +838,11 @@ export async function restoreComposerDraftSnapshot(
   );
   appAtomRegistry.set(composerDraftsAtom, next);
   await persistenceQueue.run(() =>
-    writePersistedComposerState(next, appAtomRegistry.get(stickyComposerModelSelectionAtom)),
+    writePersistedComposerState(
+      next,
+      appAtomRegistry.get(stickyComposerModelSelectionAtom),
+      appAtomRegistry.get(syncedComposerDraftsAtom),
+    ),
   );
 }
 
@@ -726,6 +881,15 @@ export function removeComposerDraftsForEnvironment(
   );
 }
 
+export function removeSyncedComposerDraftsForEnvironment(
+  syncedDrafts: Record<string, SyncedComposerDraft>,
+  environmentId: EnvironmentId,
+): Record<string, SyncedComposerDraft> {
+  return Object.fromEntries(
+    Object.entries(syncedDrafts).filter(([, record]) => record.environmentId !== environmentId),
+  );
+}
+
 export async function clearComposerDraftsEnvironment(environmentId: EnvironmentId): Promise<void> {
   ensureComposerDraftsLoaded();
   if (loadPromise !== null) {
@@ -736,14 +900,26 @@ export async function clearComposerDraftsEnvironment(environmentId: EnvironmentI
     appAtomRegistry.get(composerDraftsAtom),
     environmentId,
   );
+  // Sync bookkeeping is keyed by draft id, not by draft key, so it does not
+  // fall out with the drafts above. The environment that owned these drafts is
+  // gone and its sync worker has unmounted, so nothing would ever reap them.
+  const nextSynced = removeSyncedComposerDraftsForEnvironment(
+    appAtomRegistry.get(syncedComposerDraftsAtom),
+    environmentId,
+  );
 
   if (persistTimer !== null) {
     clearTimeout(persistTimer);
     persistTimer = null;
   }
   appAtomRegistry.set(composerDraftsAtom, next);
+  appAtomRegistry.set(syncedComposerDraftsAtom, nextSynced);
   await persistenceQueue.run(() =>
-    writePersistedComposerState(next, appAtomRegistry.get(stickyComposerModelSelectionAtom)),
+    writePersistedComposerState(
+      next,
+      appAtomRegistry.get(stickyComposerModelSelectionAtom),
+      nextSynced,
+    ),
   );
 }
 

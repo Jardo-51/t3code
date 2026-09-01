@@ -29,6 +29,7 @@ import {
   type OrchestrationCommand,
   type GitActionProgressEvent,
   type GitManagerServiceError,
+  DraftId,
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
   type OrchestrationShellStreamEvent,
@@ -701,6 +702,9 @@ const makeWsRpcLayer = (
             );
           case "thread.unarchived":
             return threadUpsertOrRemove(event.payload.threadId, event.sequence);
+          case "draft.upserted":
+          case "draft.discarded":
+            return draftUpsertOrRemove(DraftId.make(event.aggregateId), event.sequence);
           default:
             if (event.aggregateKind !== "thread") {
               return Effect.succeed(Option.none());
@@ -715,7 +719,7 @@ const makeWsRpcLayer = (
       // If both attempts fail, log and drop the stream item; treating an error as
       // a missing row would incorrectly remove a still-active aggregate.
       const retryShellProjectionRead = <A, E>(
-        aggregateKind: "project" | "thread",
+        aggregateKind: "project" | "thread" | "draft",
         aggregateId: string,
         read: Effect.Effect<A, E>,
       ): Effect.Effect<Option.Option<A>, never, never> =>
@@ -794,6 +798,39 @@ const makeWsRpcLayer = (
                     kind: "thread-upserted" as const,
                     sequence,
                     thread: nextThread,
+                  }),
+              }),
+            ),
+          ),
+        );
+
+      // Drafts are hard-deleted rather than soft-deleted, so one refetch covers
+      // both draft events: an upsert reads the row back, and a discard reads
+      // nothing and becomes a removal. A `draft-removed` the client does not
+      // have is a harmless no-op.
+      const draftUpsertOrRemove = (
+        draftId: DraftId,
+        sequence: number,
+      ): Effect.Effect<Option.Option<OrchestrationShellStreamEvent>, never, never> =>
+        retryShellProjectionRead(
+          "draft",
+          draftId,
+          projectionSnapshotQuery.getDraftById(draftId),
+        ).pipe(
+          Effect.map(
+            Option.flatMap((draft) =>
+              Option.match(draft, {
+                onNone: () =>
+                  Option.some<OrchestrationShellStreamEvent>({
+                    kind: "draft-removed" as const,
+                    sequence,
+                    draftId,
+                  }),
+                onSome: (nextDraft) =>
+                  Option.some<OrchestrationShellStreamEvent>({
+                    kind: "draft-upserted" as const,
+                    sequence,
+                    draft: nextDraft,
                   }),
               }),
             ),

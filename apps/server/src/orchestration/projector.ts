@@ -33,6 +33,8 @@ import {
   ThreadRevertedPayload,
   ThreadSessionSetPayload,
   ThreadTurnDiffCompletedPayload,
+  DraftUpsertedPayload,
+  DraftDiscardedPayload,
 } from "./Schemas.ts";
 
 type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
@@ -190,6 +192,7 @@ export function createEmptyReadModel(nowIso: string): OrchestrationReadModel {
     snapshotSequence: 0,
     projects: [],
     threads: [],
+    drafts: [],
     updatedAt: nowIso,
   };
 }
@@ -275,6 +278,9 @@ export function projectEvent(
                 }
               : project,
           ),
+          // Unlike threads, drafts are not soft-deleted: nothing can start a
+          // turn for a draft whose project is gone.
+          drafts: nextBase.drafts.filter((draft) => draft.projectId !== payload.projectId),
         })),
       );
 
@@ -813,6 +819,36 @@ export function projectEvent(
             }),
           };
         }),
+      );
+
+    // Last write wins on the draft's own `updatedAt` rather than on event
+    // order: two clients editing the same draft dispatch independently, so the
+    // event that lands second is not necessarily the edit made second. Applying
+    // the same rule here and on replay keeps the projection deterministic.
+    case "draft.upserted":
+      return decodeForEvent(DraftUpsertedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const existing = nextBase.drafts.find((entry) => entry.id === payload.draft.id);
+          if (existing && existing.updatedAt > payload.draft.updatedAt) {
+            return nextBase;
+          }
+          return {
+            ...nextBase,
+            drafts: existing
+              ? nextBase.drafts.map((entry) =>
+                  entry.id === payload.draft.id ? payload.draft : entry,
+                )
+              : [...nextBase.drafts, payload.draft],
+          };
+        }),
+      );
+
+    case "draft.discarded":
+      return decodeForEvent(DraftDiscardedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          drafts: nextBase.drafts.filter((entry) => entry.id !== payload.draftId),
+        })),
       );
 
     default:

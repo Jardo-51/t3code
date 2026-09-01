@@ -10,11 +10,14 @@ import {
   createNativeStackScreen,
   type NativeStackNavigationOptions,
 } from "@react-navigation/native-stack";
+import { useAtomValue } from "@effect/atom-react";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { useEffect, useRef } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
 import { AppText as Text } from "./components/AppText";
+import { environmentCatalog } from "./connection/catalog";
 import { getCompactBrandHeaderOptions } from "./components/CompactBrandTitle";
 import { ArchivedThreadsRouteScreen } from "./features/archive/ArchivedThreadsRouteScreen";
 import { useAgentNotificationNavigation } from "./features/agent-awareness/notificationNavigation";
@@ -72,6 +75,7 @@ import {
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "./native/native-glass";
 import { nativeHeaderScrollEdgeEffects } from "./native/StackHeader";
 import { FORM_SHEET_PRESENTATION_OPTIONS } from "./native/sheet-surface";
+import { useComposerDraftSync } from "./state/use-composer-draft-sync";
 import { useThreadOutboxDrain } from "./state/use-thread-outbox-drain";
 
 const HEADER_SCROLL_EDGE_EFFECTS = nativeHeaderScrollEdgeEffects(Platform.OS, Platform.Version);
@@ -358,6 +362,25 @@ function ThreadOutboxDrainWorker() {
   return null;
 }
 
+// One worker per environment, for the same reason as the drain worker above:
+// draft sync follows shell snapshots, and hosting it in null-rendering leaves
+// keeps those updates off every screen.
+function ComposerDraftSyncWorkers() {
+  const catalog = useAtomValue(environmentCatalog.catalogValueAtom);
+  return (
+    <>
+      {Array.from(catalog.entries.keys()).map((environmentId) => (
+        <ComposerDraftSyncWorker key={environmentId} environmentId={environmentId} />
+      ))}
+    </>
+  );
+}
+
+function ComposerDraftSyncWorker(props: { readonly environmentId: EnvironmentId }) {
+  useComposerDraftSync(props.environmentId);
+  return null;
+}
+
 function RootStackLayout(props: {
   readonly children: React.ReactNode;
   readonly state: NavigationState;
@@ -394,6 +417,7 @@ function RootStackLayout(props: {
   return (
     <HardwareKeyboardCommandProvider pathname={pathname}>
       <ThreadOutboxDrainWorker />
+      <ComposerDraftSyncWorkers />
       <ShowcaseCaptureCoordinator pathname={pathname} />
       <ExistingThreadSettingsRouteProvider>
         <AdaptiveWorkspaceLayout pathname={workspacePathname}>

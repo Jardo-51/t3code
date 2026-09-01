@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.37-nightly.20260829.1218-jardo.1] - Unreleased
 
+### Added
+
+- [Discussion 6895](https://github.com/pingdotgg/t3code/discussions/6895) Unsent drafts sync across web, desktop and mobile through the environment that will run them
+
 ## [0.0.34-nightly.20260815.1098-jardo.1] - 2026-08-19
 
 ### Added

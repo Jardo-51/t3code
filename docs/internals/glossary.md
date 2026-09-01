@@ -48,17 +48,25 @@ Orchestration is the server-side domain layer that turns runtime activity into s
 
 #### Aggregate
 
-The domain object a command or event belongs to. In [the contracts][1], that is usually `project` or `thread`. See [decider.ts][8].
+The domain object a command or event belongs to. In [the contracts][1], that is `project`, `thread`, or `draft`. See [decider.ts][8].
+
+#### Draft
+
+An unsent prompt plus the routing choices its first turn will use — target project, branch, worktree or local mode, model, and interaction mode. A draft is its own aggregate rather than a thread that has not started, because `envMode` and `startFromOrigin` stop meaning anything once the turn begins, and thread lists would otherwise have to exclude rows that are not threads yet. It carries the `threadId` its first turn will claim, so attachments and checkpoints can be keyed by that id before the thread exists.
+
+Drafts live on the environment that will run them and reach every client on the shell stream, so a prompt started on one client is waiting on the rest. Concurrent edits resolve last-write-wins on the draft's own `updatedAt` — the same rule in [decider.ts][8], [projector.ts][4], and the client planner — and `thread.create` emits `draft.discarded` for the draft holding that thread id, so sending retires the draft everywhere in one round trip.
+
+Only text-shaped content syncs. Images and annotation screenshots stay on the device that captured them, since base64 payloads on the shell stream would cost every connected client on every keystroke pause; `deviceOnlyAttachmentCount` is what other clients render so a draft never silently loses attachments it appears to still have.
 
 #### Command
 
 A typed request to change domain state. In [the contracts][1], commands are validated in [commandInvariants.ts][9] and turned into events by [decider.ts][8].
-Examples include `thread.create`, `thread.turn.start`, and `thread.checkpoint.revert`.
+Examples include `thread.create`, `thread.turn.start`, `thread.checkpoint.revert`, and `draft.upsert`.
 
 #### Domain Event
 
 A persisted fact that something already happened. In [the contracts][1], events are the source of truth, and [projector.ts][4] shows how they are applied.
-Examples include `thread.created`, `thread.message-sent`, and `thread.turn-diff-completed`.
+Examples include `thread.created`, `thread.message-sent`, `thread.turn-diff-completed`, and `draft.upserted`.
 
 #### Decider
 
@@ -74,7 +82,7 @@ The logic that applies domain events to the read model or projection tables. See
 
 #### Read model
 
-The current materialized view of orchestration state. In [the contracts][1], it holds projects, threads, messages, activities, checkpoints, and session state. See [ProjectionSnapshotQuery.ts][10] and [OrchestrationEngine.ts][7].
+The current materialized view of orchestration state. In [the contracts][1], it holds projects, threads, drafts, messages, activities, checkpoints, and session state. See [ProjectionSnapshotQuery.ts][10] and [OrchestrationEngine.ts][7].
 
 #### Reactor
 

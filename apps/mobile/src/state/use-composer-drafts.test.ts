@@ -101,6 +101,7 @@ import {
   getComposerDraftSnapshot,
   mergeComposerDraftContentState,
   removeComposerDraftsForEnvironment,
+  removeSyncedComposerDraftsForEnvironment,
   resetComposerDraftsLoadState,
   restoreComposerDraftSnapshotState,
   setComposerDraftText,
@@ -601,6 +602,32 @@ describe("mobile composer drafts", () => {
       [`${retainedEnvironmentId}:thread-local`]: DRAFT,
       [`new-task:${retainedEnvironmentId}:project-local`]: DRAFT,
     });
+  });
+
+  it("removes sync bookkeeping owned by the selected environment", () => {
+    const environmentId = EnvironmentId.make("environment-cloud");
+    const retainedEnvironmentId = EnvironmentId.make("environment-local");
+    const retained = {
+      draftKey: `new-task:${retainedEnvironmentId}:project-local`,
+      environmentId: retainedEnvironmentId,
+      signature: "signature-local",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    expect(
+      removeSyncedComposerDraftsForEnvironment(
+        {
+          "draft-cloud": {
+            draftKey: `new-task:${environmentId}:project-cloud`,
+            environmentId,
+            signature: "signature-cloud",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+          "draft-local": retained,
+        },
+        environmentId,
+      ),
+    ).toEqual({ "draft-local": retained });
   });
 
   it("waits for persisted drafts before copying content between projects", async () => {
