@@ -17,4 +17,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- [#3594](https://github.com/pingdotgg/t3code/issues/3594) Duplicate prompt execution by title text generation (adopted upstream PR [#4062](https://github.com/pingdotgg/t3code/pull/4062))
+- [#3594](https://github.com/pingdotgg/t3code/issues/3594) Duplicate prompt execution by title text generation (adopted upstream PR [#4062](https://github.com/pingdotgg/t3code/pull/4062), superseded by [#4169](https://github.com/pingdotgg/t3code/pull/4169))
