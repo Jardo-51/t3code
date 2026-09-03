@@ -5,6 +5,10 @@
 - [feat(web): show current-provider usage in the chat box](https://github.com/pingdotgg/t3code/pull/8445)
 - [feat(desktop): add local file mentions](https://github.com/pingdotgg/t3code/pull/6203)
 
+## Issues
+
+- [[Feature]: Show compaction state and result instead of a generic "Working"](https://github.com/pingdotgg/t3code/issues/7652)
+
 ## Discussions
 
 - [[Feature]: Show usage for all configured Claude/Codex providers (not just the default ones)](https://github.com/pingdotgg/t3code/discussions/6920)
