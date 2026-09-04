@@ -11,6 +11,7 @@
 
 ## Discussions
 
+- [[Feature]: Show subscription usage in Claude Code Desktop style](https://github.com/pingdotgg/t3code/discussions/6993)
 - [[Feature]: Show usage for all configured Claude/Codex providers (not just the default ones)](https://github.com/pingdotgg/t3code/discussions/6920)
 - [[Feature]: Scheduled Prompts](https://github.com/pingdotgg/t3code/discussions/6748)
 - [[Feature]: visual interface for subagents](https://github.com/pingdotgg/t3code/discussions/6858)
