@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.39-nightly.20260903.1273-jardo.1] - Unreleased
 
+### Added
+
+- Fork build info in the About section (git ref + sha, build time)
+
 ## [0.0.34-nightly.20260815.1098-jardo.1] - 2026-08-19
 
 ### Added

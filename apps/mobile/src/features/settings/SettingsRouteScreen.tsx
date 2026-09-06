@@ -59,6 +59,7 @@ import { useSavedRemoteConnections } from "../../state/use-remote-environment-re
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
+import { CustomBuildInfoRows } from "./components/CustomBuildInfoRows";
 import { resolveAgentAwarenessPlatformPresentation } from "./SettingsRouteScreen.logic";
 
 type NotificationStatus = "checking" | "enabled" | "disabled" | "unsupported";
@@ -806,6 +807,7 @@ function AppSettingsSection() {
       ) : (
         versionRow
       )}
+      <CustomBuildInfoRows />
     </SettingsSection>
   );
 }
