@@ -5,6 +5,14 @@ All notable changes against the [upstream repo](https://github.com/pingdotgg/t3c
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.41-nightly.20260908.1377-jardo.1] - Unreleased
+
+This version is so far functionally equivalent to upstream.
+
+### Changed
+
+- Reverted adoption of upstream PR [#4062](https://github.com/pingdotgg/t3code/pull/4062), which was superseded by [#4169](https://github.com/pingdotgg/t3code/pull/4169)
+
 ## [0.0.39-nightly.20260903.1273-jardo.1] - 2026-09-08
 
 ### Added
