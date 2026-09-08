@@ -43,6 +43,7 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 // take well beyond the default 30s (e.g. a 375k-file repo takes ~40s on an idle
 // machine). Give it generous headroom while still bounding a genuinely hung git.
 const WORKTREE_ADD_TIMEOUT_MS = 300_000;
+const WORKTREE_REMOVE_TIMEOUT_MS = Duration.toMillis(Duration.minutes(5));
 const DEFAULT_MAX_OUTPUT_BYTES = 1_000_000;
 const OUTPUT_TRUNCATED_MARKER = "\n\n[truncated]";
 const PREPARED_COMMIT_PATCH_MAX_OUTPUT_BYTES = 49_000;
@@ -1583,6 +1584,42 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
   });
 
   const readStatusDetailsLocal = Effect.fn("readStatusDetailsLocal")(function* (cwd: string) {
+    const indexResult = yield* executeGitWithStableDiagnostics(
+      "GitVcsDriver.statusDetails.indexPath",
+      cwd,
+      ["rev-parse", "--git-path", "index"],
+      { allowNonZeroExit: true },
+    ).pipe(
+      Effect.catchTags({
+        GitCommandError: (error) =>
+          isMissingGitCwdError(error) ? Effect.succeed(null) : Effect.fail(error),
+      }),
+    );
+    if (indexResult === null) return NON_REPOSITORY_STATUS_DETAILS;
+    if (indexResult.exitCode === 0) {
+      const lockPath = `${path.resolve(cwd, indexResult.stdout.trim())}.lock`;
+      const lockError = new GitCommandError({
+        operation: "GitVcsDriver.statusDetails.indexPath",
+        command: "git",
+        cwd,
+        detail: "Git index is locked. Status will resume when the index lock is removed.",
+      });
+      // Status can succeed while locked, repeatedly running LFS clean filters without caching.
+      if (
+        yield* fileSystem.exists(lockPath).pipe(
+          Effect.mapError(
+            (cause) =>
+              new GitCommandError({
+                ...lockError,
+                detail: "Failed to check the Git index lock.",
+                cause,
+              }),
+          ),
+        )
+      ) {
+        return yield* lockError;
+      }
+    }
     const statusResult = yield* executeGitWithStableDiagnostics(
       "GitVcsDriver.statusDetails.status",
       cwd,
@@ -3085,7 +3122,13 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       "GitVcsDriver.removeWorktree",
       input.cwd,
       args,
-      { timeoutMs: 15_000, allowNonZeroExit: true },
+      {
+        // Removing dependency-heavy worktrees is filesystem-bound and can take
+        // minutes, especially on Windows. Keep it bounded without interrupting
+        // git midway through cleanup.
+        timeoutMs: WORKTREE_REMOVE_TIMEOUT_MS,
+        allowNonZeroExit: true,
+      },
     );
     if (result.exitCode === 0) {
       return;

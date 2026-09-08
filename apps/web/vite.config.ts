@@ -1,6 +1,5 @@
 import * as NodeZlib from "node:zlib";
 
-import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
@@ -14,6 +13,7 @@ import { DEV_PROXIED_PATH_PREFIXES } from "@t3tools/shared/devProxy";
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
 import { resolveCustomBuildInfo } from "../../custom/build-info";
+import { tailwindPlugins } from "./vite/tailwind";
 
 const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
@@ -82,6 +82,7 @@ const unitTestProject = {
     // run, those async tests can exceed Vitest's default 5s budget.
     hookTimeout: 15_000,
     testTimeout: 15_000,
+    setupFiles: ["../../packages/shared/src/testing/longTempDir.ts"],
   },
 } satisfies TestProjectInlineConfiguration;
 
@@ -171,7 +172,7 @@ export default defineConfig(() => {
         parserOpts: { plugins: ["typescript", "jsx"] },
         presets: [reactCompilerPreset()],
       }),
-      tailwindcss(),
+      tailwindPlugins(bundledDev),
     ],
     optimizeDeps: {
       include: [
@@ -271,6 +272,7 @@ export default defineConfig(() => {
     build: {
       outDir: "dist",
       emptyOutDir: true,
+      manifest: true,
       sourcemap: buildSourcemap,
     },
     test: {
