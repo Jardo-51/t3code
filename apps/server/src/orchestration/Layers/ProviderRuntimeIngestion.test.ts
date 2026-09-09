@@ -899,6 +899,67 @@ describe("ProviderRuntimeIngestion", () => {
     },
   );
 
+  it.each(["compacting", "running"] as const)(
+    "preserves active compaction when a superseded turn reports %s",
+    async (state) => {
+      const harness = await createHarness();
+      const threadId = asThreadId("thread-1");
+      const turnId = asTurnId("turn-current");
+      const provider = ProviderDriverKind.make("claudeAgent");
+      await harness.emitAndDrain([
+        {
+          type: "turn.started",
+          eventId: asEventId("evt-current-start"),
+          provider,
+          threadId,
+          turnId,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          type: "session.state.changed",
+          eventId: asEventId("evt-current-compaction"),
+          provider,
+          threadId,
+          turnId,
+          createdAt: "2026-01-01T00:00:01.000Z",
+          payload: { state: "compacting" },
+        },
+        {
+          type: "session.state.changed",
+          eventId: asEventId("evt-superseded-state"),
+          provider,
+          threadId,
+          turnId: asTurnId("turn-superseded"),
+          createdAt: "2026-01-01T00:00:02.000Z",
+          payload: { state },
+        },
+      ]);
+
+      const thread = (await harness.readModel()).threads.find((entry) => entry.id === threadId);
+      expect(thread?.session).toMatchObject({
+        status: "running",
+        activeTurnId: turnId,
+        statusDetail: "compacting",
+      });
+
+      await harness.emitAndDrain([
+        {
+          type: "session.state.changed",
+          eventId: asEventId("evt-current-compaction-ended"),
+          provider,
+          threadId,
+          turnId,
+          createdAt: "2026-01-01T00:00:03.000Z",
+          payload: { state: "running" },
+        },
+      ]);
+      const resumed = (await harness.readModel()).threads.find((entry) => entry.id === threadId);
+      expect(resumed?.session?.status).toBe("running");
+      expect(resumed?.session?.activeTurnId).toBe(turnId);
+      expect(resumed?.session?.statusDetail).toBeUndefined();
+    },
+  );
+
   it("clears active turn when provider session becomes ready", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
