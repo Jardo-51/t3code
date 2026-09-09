@@ -802,6 +802,68 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.lastError).toBeNull();
   });
 
+  it("keeps a compacting session running and drops the detail once compaction ends", async () => {
+    const harness = await createHarness();
+    const startedAt = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-turn-started-compacting"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      createdAt: startedAt,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-compacting"),
+    });
+
+    await waitForThread(
+      harness.readModel,
+      (entry) =>
+        entry.session?.status === "running" && entry.session?.activeTurnId === "turn-compacting",
+      10_000,
+    );
+
+    harness.emit({
+      type: "session.state.changed",
+      eventId: asEventId("evt-session-state-compacting"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-compacting"),
+      createdAt: "2026-01-01T00:00:01.000Z",
+      payload: {
+        state: "compacting",
+        reason: "status:compacting",
+      },
+    });
+
+    let thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.statusDetail === "compacting",
+    );
+    // Compaction must not disturb the turn it runs inside.
+    expect(thread.session?.status).toBe("running");
+    expect(thread.session?.activeTurnId).toBe("turn-compacting");
+
+    harness.emit({
+      type: "session.state.changed",
+      eventId: asEventId("evt-session-state-compacting-cleared"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-compacting"),
+      createdAt: "2026-01-01T00:00:02.000Z",
+      payload: {
+        state: "running",
+        reason: "status:active",
+      },
+    });
+
+    thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.statusDetail === undefined,
+    );
+    expect(thread.session?.status).toBe("running");
+    expect(thread.session?.activeTurnId).toBe("turn-compacting");
+  });
+
   it("clears active turn when provider session becomes ready", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
