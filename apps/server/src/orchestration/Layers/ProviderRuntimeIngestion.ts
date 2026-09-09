@@ -1596,11 +1596,13 @@ const make = Effect.gen(function* () {
           }
         })();
         // Compaction is an overlay on a busy session, not a lifecycle state of
-        // its own. Only the provider's compacting signal raises it; every other
+        // its own. Only a non-conflicting compacting signal raises it; every other
         // lifecycle event here drops it by omission, so the label cannot outlive
         // the work even if the provider never sends a closing status.
         const statusDetail =
-          event.type === "session.state.changed" && event.payload.state === "compacting"
+          event.type === "session.state.changed" &&
+          event.payload.state === "compacting" &&
+          !conflictsWithActiveTurn
             ? ("compacting" as const)
             : undefined;
         const nextActiveTurnId =

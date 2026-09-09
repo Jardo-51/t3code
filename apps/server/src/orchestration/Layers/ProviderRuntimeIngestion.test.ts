@@ -864,6 +864,41 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.activeTurnId).toBe("turn-compacting");
   });
 
+  it.each([
+    { eventTurnId: "turn-superseded", expectedDetail: undefined },
+    { eventTurnId: "turn-current", expectedDetail: "compacting" },
+    { eventTurnId: undefined, expectedDetail: "compacting" },
+  ])(
+    "only applies compaction from a non-conflicting turn: $eventTurnId",
+    async ({ eventTurnId, expectedDetail }) => {
+      const harness = await createHarness();
+      await harness.emitAndDrain([
+        {
+          type: "turn.started",
+          eventId: asEventId("evt-current-turn-started"),
+          provider: ProviderDriverKind.make("claudeAgent"),
+          createdAt: "2026-01-01T00:00:00.000Z",
+          threadId: asThreadId("thread-1"),
+          turnId: asTurnId("turn-current"),
+        },
+        {
+          type: "session.state.changed",
+          eventId: asEventId("evt-delayed-compacting"),
+          provider: ProviderDriverKind.make("claudeAgent"),
+          createdAt: "2026-01-01T00:00:01.000Z",
+          threadId: asThreadId("thread-1"),
+          ...(eventTurnId !== undefined ? { turnId: asTurnId(eventTurnId) } : {}),
+          payload: { state: "compacting" },
+        },
+      ]);
+
+      const thread = (await harness.readModel()).threads.find((entry) => entry.id === "thread-1");
+      expect(thread?.session?.status).toBe("running");
+      expect(thread?.session?.activeTurnId).toBe("turn-current");
+      expect(thread?.session?.statusDetail).toBe(expectedDetail);
+    },
+  );
+
   it("clears active turn when provider session becomes ready", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
