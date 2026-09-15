@@ -1,4 +1,5 @@
 import type { ModelOption, ProviderGroup } from "../../lib/modelOptions";
+import type { FavoriteModel } from "../../persistence/mobile-preferences";
 
 /** Match the terms a user can actually see or recognize in the model picker. */
 export function modelMatchesCatalogQuery(input: {
@@ -54,4 +55,51 @@ export function providerSectionIsCollapsed(input: {
     return false;
   }
   return input.defaultExpanded ? input.hasExpansionOverride : !input.hasExpansionOverride;
+}
+
+/** Whether a catalog model is in the device's favorites. */
+export function isFavoriteModel(
+  favorites: ReadonlyArray<FavoriteModel>,
+  option: ModelOption,
+): boolean {
+  return favorites.some(
+    (favorite) =>
+      favorite.provider === option.selection.instanceId &&
+      favorite.model === option.selection.model,
+  );
+}
+
+/** Adds a model to the end of the favorites, or removes it when already present. */
+export function toggleFavoriteModel(
+  favorites: ReadonlyArray<FavoriteModel>,
+  option: ModelOption,
+): ReadonlyArray<FavoriteModel> {
+  return isFavoriteModel(favorites, option)
+    ? favorites.filter(
+        (favorite) =>
+          favorite.provider !== option.selection.instanceId ||
+          favorite.model !== option.selection.model,
+      )
+    : [...favorites, { provider: option.selection.instanceId, model: option.selection.model }];
+}
+
+/**
+ * Favorites that exist in the current catalog, in the order they were added.
+ * Favorites for providers this environment does not have are skipped, not dropped.
+ */
+export function favoriteModelOptions(
+  groups: ReadonlyArray<ProviderGroup>,
+  favorites: ReadonlyArray<FavoriteModel>,
+): ReadonlyArray<ModelOption> {
+  return favorites.flatMap((favorite) => {
+    for (const group of groups) {
+      const option = group.models.find(
+        (model) =>
+          model.selection.instanceId === favorite.provider &&
+          model.selection.model === favorite.model,
+      );
+      if (option) return [option];
+    }
+    return [];
+  });
 }

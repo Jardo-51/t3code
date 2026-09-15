@@ -5,8 +5,11 @@ import { ProviderInstanceId, type ProviderOptionSelection } from "@t3tools/contr
 import type { ModelOption } from "../../lib/modelOptions";
 import {
   canCommitPendingModel,
+  favoriteModelOptions,
+  isFavoriteModel,
   modelMatchesCatalogQuery,
   pendingModelAfterPress,
+  toggleFavoriteModel,
 } from "./thread-settings-sheet-state";
 
 function modelOption(
@@ -115,5 +118,35 @@ describe("thread settings sheet state", () => {
         },
       ]),
     ).toBe(false);
+  });
+
+  it("toggles favorites in and out without disturbing the others", () => {
+    const first = modelOption("gpt-first");
+    const second = modelOption("gpt-second");
+
+    const added = toggleFavoriteModel(toggleFavoriteModel([], first), second);
+    expect(added).toEqual([
+      { provider: "codex", model: "gpt-first" },
+      { provider: "codex", model: "gpt-second" },
+    ]);
+    expect(isFavoriteModel(added, first)).toBe(true);
+
+    const removed = toggleFavoriteModel(added, first);
+    expect(removed).toEqual([{ provider: "codex", model: "gpt-second" }]);
+    expect(isFavoriteModel(removed, first)).toBe(false);
+  });
+
+  it("lists favorites in the order they were added and skips ones outside the catalog", () => {
+    const first = modelOption("gpt-first");
+    const second = modelOption("gpt-second");
+    const groups = [{ providerKey: "codex", providerLabel: "Codex", models: [first, second] }];
+
+    expect(
+      favoriteModelOptions(groups, [
+        { provider: "codex", model: "gpt-second" },
+        { provider: "claudeAgent", model: "claude-opus-5" },
+        { provider: "codex", model: "gpt-first" },
+      ]),
+    ).toEqual([second, first]);
   });
 });

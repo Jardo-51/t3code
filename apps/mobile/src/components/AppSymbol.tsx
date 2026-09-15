@@ -78,6 +78,8 @@ import IconSearch from "@tabler/icons-react-native/IconSearch";
 import IconServer from "@tabler/icons-react-native/IconServer";
 import IconSettings from "@tabler/icons-react-native/IconSettings";
 import IconSparkles from "@tabler/icons-react-native/IconSparkles";
+import IconStar from "@tabler/icons-react-native/IconStar";
+import IconStarFilled from "@tabler/icons-react-native/IconStarFilled";
 import IconStack2 from "@tabler/icons-react-native/IconStack2";
 import IconStethoscope from "@tabler/icons-react-native/IconStethoscope";
 import IconSun from "@tabler/icons-react-native/IconSun";
@@ -174,6 +176,8 @@ const ANDROID_ICON_BY_SF_SYMBOL: Partial<Record<SFSymbol, Icon>> = {
   "square.split.2x1": IconLayoutColumns,
   "sun.max": IconSun,
   "stop.fill": IconPlayerStopFilled,
+  star: IconStar,
+  "star.fill": IconStarFilled,
   terminal: IconTerminal2,
   "text.bubble": IconMessage,
   "text.word.spacing": IconLetterSpacing,

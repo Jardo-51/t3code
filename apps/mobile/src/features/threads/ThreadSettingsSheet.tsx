@@ -6,6 +6,7 @@ import type {
   ProviderOptionSelection,
   RuntimeMode,
 } from "@t3tools/contracts";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { LegendListRenderItemProps } from "@legendapp/list/react-native";
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { HeaderHeightContext } from "@react-navigation/elements";
@@ -19,6 +20,7 @@ import {
   createNativeStackNavigator,
   type NativeStackNavigationProp,
 } from "@react-navigation/native-stack";
+import { AsyncResult } from "effect/unstable/reactivity";
 import * as Haptics from "expo-haptics";
 import {
   createContext,
@@ -49,6 +51,8 @@ import {
   nativeHeaderScrollEdgeEffects,
 } from "../../native/StackHeader";
 import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
+import type { FavoriteModel } from "../../persistence/mobile-preferences";
+import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useNewTaskFlow } from "./new-task-flow-provider";
@@ -65,9 +69,12 @@ import {
 import { RUNTIME_MODE_CHOICES, selectableChoices } from "./thread-settings-options";
 import {
   canCommitPendingModel,
+  favoriteModelOptions,
+  isFavoriteModel,
   modelMatchesCatalogQuery,
   pendingModelAfterPress,
   providerSectionIsCollapsed,
+  toggleFavoriteModel,
 } from "./thread-settings-sheet-state";
 
 /**
@@ -91,6 +98,7 @@ const THREAD_SETTINGS_MAINTAIN_VISIBLE_CONTENT_POSITION = {
 const THREAD_SETTINGS_CATALOG_LAYOUT_TRANSITION = LinearTransition.duration(180);
 const THREAD_SETTINGS_CATALOG_ENTER_TRANSITION = FadeIn.duration(140);
 const THREAD_SETTINGS_CATALOG_EXIT_TRANSITION = FadeOut.duration(120);
+const NO_FAVORITE_MODELS: ReadonlyArray<FavoriteModel> = [];
 const THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION = LinearTransition.duration(180);
 const THREAD_SETTINGS_OPTION_ENTER_TRANSITION = FadeIn.duration(140);
 const THREAD_SETTINGS_OPTION_EXIT_TRANSITION = FadeOut.duration(100);
@@ -101,7 +109,9 @@ const THREAD_SETTINGS_HEADER_SCROLL_EDGE_EFFECTS = nativeHeaderScrollEdgeEffects
 function ModelRow(props: {
   readonly option: ModelOption;
   readonly selected: boolean;
+  readonly favorite: boolean;
   readonly onPress: () => void;
+  readonly onToggleFavorite: () => void;
   readonly isFirst: boolean;
   readonly isLast: boolean;
 }) {
@@ -110,10 +120,19 @@ function ModelRow(props: {
   return (
     <Pressable
       accessibilityLabel={[props.option.label, props.option.subtitle].filter(Boolean).join(", ")}
+      accessibilityActions={[
+        {
+          name: "toggleFavorite",
+          label: props.favorite ? "Remove from favorites" : "Add to favorites",
+        },
+      ]}
       accessibilityRole="radio"
       accessibilityState={{
         checked: props.selected,
         disabled: props.option.isUnavailable === true,
+      }}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "toggleFavorite") props.onToggleFavorite();
       }}
       disabled={props.option.isUnavailable}
       onPress={props.onPress}
@@ -161,7 +180,41 @@ function ModelRow(props: {
           weight="semibold"
         />
       ) : null}
+      <Pressable
+        accessibilityLabel={
+          props.favorite
+            ? `Remove ${props.option.label} from favorites`
+            : `Add ${props.option.label} to favorites`
+        }
+        accessibilityRole="button"
+        accessibilityState={{ selected: props.favorite }}
+        className="-mr-2 size-9 items-center justify-center rounded-full active:opacity-60"
+        hitSlop={4}
+        onPress={props.onToggleFavorite}
+      >
+        <SymbolView
+          name={props.favorite ? "star.fill" : "star"}
+          size={15}
+          tintColorClassName={props.favorite ? "accent-icon" : "accent-icon-subtle"}
+          type="monochrome"
+        />
+      </Pressable>
     </Pressable>
+  );
+}
+
+/** Header for the device's favorite models, pinned above the provider catalogs. */
+function FavoritesHeader() {
+  return (
+    <View accessibilityRole="header" className="mx-4 min-h-9 flex-row items-center gap-2 px-1 pt-1">
+      <SymbolView
+        name="star.fill"
+        size={13}
+        tintColorClassName={"accent-icon-subtle"}
+        type="monochrome"
+      />
+      <Text className="text-sm font-t3-medium text-foreground-muted">Favorites</Text>
+    </View>
   );
 }
 
@@ -377,6 +430,7 @@ type ThreadSettingsSessionValue = {
   readonly onUpdateRuntimeMode: (mode: RuntimeMode) => void;
   readonly displayedDescriptors: ReadonlyArray<ProviderOptionDescriptor>;
   readonly providerExpansionOverrides: ReadonlySet<string>;
+  readonly favoriteModels: ReadonlyArray<FavoriteModel>;
   readonly hasLegacyModels: boolean;
   readonly pendingModel: ModelOption | null;
   readonly providerFilter: string | null;
@@ -391,6 +445,7 @@ type ThreadSettingsSessionValue = {
   readonly setSearchQuery: (query: string) => void;
   readonly setShowLegacy: (showLegacy: boolean) => void;
   readonly toggleProvider: (providerKey: string) => void;
+  readonly toggleFavorite: (option: ModelOption) => void;
 };
 
 const ThreadSettingsSessionContext = createContext<ThreadSettingsSessionValue | null>(null);
@@ -406,6 +461,11 @@ function ThreadSettingsSessionProvider(
     () => new Set(),
   );
   const [pendingModel, setPendingModel] = useState<ModelOption | null>(null);
+  const preferences = useAtomValue(mobilePreferencesAtom);
+  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const favoriteModels =
+    (AsyncResult.isSuccess(preferences) ? preferences.value.favoriteModels : undefined) ??
+    NO_FAVORITE_MODELS;
 
   const isApplied = useCallback(
     (option: ModelOption) =>
@@ -482,6 +542,14 @@ function ThreadSettingsSessionProvider(
     });
   }, []);
 
+  const toggleFavorite = useCallback(
+    (option: ModelOption) => {
+      void Haptics.selectionAsync();
+      savePreferences({ favoriteModels: toggleFavoriteModel(favoriteModels, option) });
+    },
+    [favoriteModels, savePreferences],
+  );
+
   const pressModel = useCallback(
     (option: ModelOption) => {
       void Haptics.selectionAsync();
@@ -505,6 +573,7 @@ function ThreadSettingsSessionProvider(
       onUpdateRuntimeMode: props.onUpdateRuntimeMode,
       displayedDescriptors,
       providerExpansionOverrides,
+      favoriteModels,
       hasLegacyModels,
       pendingModel,
       providerFilter,
@@ -519,11 +588,13 @@ function ThreadSettingsSessionProvider(
       setSearchQuery,
       setShowLegacy: setShowLegacyToggle,
       toggleProvider,
+      toggleFavorite,
     }),
     [
       applyOptionChange,
       commitPendingModel,
       displayedDescriptors,
+      favoriteModels,
       providerExpansionOverrides,
       hasLegacyModels,
       isApplied,
@@ -538,6 +609,7 @@ function ThreadSettingsSessionProvider(
       props.runtimeMode,
       searchQuery,
       showLegacyToggle,
+      toggleFavorite,
       toggleProvider,
     ],
   );
@@ -581,6 +653,10 @@ type ThreadSettingsCatalogItem =
       readonly isLast: boolean;
     }
   | {
+      readonly kind: "favorites";
+      readonly key: "favorites";
+    }
+  | {
       readonly kind: "empty";
       readonly key: "empty";
     }
@@ -599,12 +675,18 @@ function ThreadSettingsModelListRow(props: {
     () => session.pressModel(props.option),
     [props.option, session.pressModel],
   );
+  const onToggleFavorite = useCallback(
+    () => session.toggleFavorite(props.option),
+    [props.option, session.toggleFavorite],
+  );
 
   return (
     <ModelRow
+      favorite={isFavoriteModel(session.favoriteModels, props.option)}
       isFirst={props.isFirst}
       isLast={props.isLast}
       onPress={onPress}
+      onToggleFavorite={onToggleFavorite}
       option={props.option}
       selected={session.isDisplayed(props.option)}
     />
@@ -635,9 +717,29 @@ function ThreadSettingsProviderListHeader(props: {
 function useThreadSettingsCatalogItems(
   session: ThreadSettingsSessionValue,
 ): ReadonlyArray<ThreadSettingsCatalogItem> {
-  return useMemo(
-    () =>
-      session.providerGroups.flatMap((group) => {
+  return useMemo(() => {
+    const isNarrowed = session.providerFilter !== null || session.searchQuery.trim().length > 0;
+    // Favorites are a shortcut for the unfiltered catalog. Search and provider
+    // filters already narrow to the models the user is looking for.
+    const favorites = isNarrowed
+      ? []
+      : favoriteModelOptions(session.providerGroups, session.favoriteModels);
+    const favoriteItems: ReadonlyArray<ThreadSettingsCatalogItem> =
+      favorites.length === 0
+        ? []
+        : [
+            { kind: "favorites", key: "favorites" },
+            ...favorites.map((option, index) => ({
+              kind: "model" as const,
+              key: `favorite:${option.key}`,
+              option,
+              isFirst: index === 0,
+              isLast: index === favorites.length - 1,
+            })),
+          ];
+    return [
+      ...favoriteItems,
+      ...session.providerGroups.flatMap((group) => {
         if (session.providerFilter !== null && group.providerKey !== session.providerFilter) {
           return [];
         }
@@ -660,7 +762,6 @@ function useThreadSettingsCatalogItems(
         // stays stable for the lifetime of this picker (Save closes it), so it
         // is safe to use as the initial selected-provider default.
         const containsAppliedSelection = group.models.some(session.isApplied);
-        const isNarrowed = session.providerFilter !== null || session.searchQuery.trim().length > 0;
         const collapsible = !isNarrowed;
         const collapsed = providerSectionIsCollapsed({
           defaultExpanded: isPrimary || containsAppliedSelection,
@@ -691,16 +792,17 @@ function useThreadSettingsCatalogItems(
           })),
         ];
       }),
-    [
-      session.isApplied,
-      session.isDisplayed,
-      session.providerExpansionOverrides,
-      session.providerFilter,
-      session.providerGroups,
-      session.searchQuery,
-      session.showLegacy,
-    ],
-  );
+    ];
+  }, [
+    session.favoriteModels,
+    session.isApplied,
+    session.isDisplayed,
+    session.providerExpansionOverrides,
+    session.providerFilter,
+    session.providerGroups,
+    session.searchQuery,
+    session.showLegacy,
+  ]);
 }
 
 function ThreadSettingsOptionsItem(props: {
@@ -819,6 +921,8 @@ function ThreadSettingsMainContent(props: {
             option={item.option}
           />
         );
+      } else if (item.kind === "favorites") {
+        content = <FavoritesHeader />;
       } else if (item.kind === "empty") {
         content = (
           <View className="items-center px-8 py-14">

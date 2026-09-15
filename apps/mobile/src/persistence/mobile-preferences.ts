@@ -45,6 +45,14 @@ export interface Preferences {
   /** Fresh keys reset both shelves to collapsed when users update. */
   readonly threadListSettledShelfExpanded?: boolean;
   readonly threadListSnoozedShelfExpanded?: boolean;
+  /** Device-local counterpart of web's `favorites` client setting, in the same shape. */
+  readonly favoriteModels?: ReadonlyArray<FavoriteModel>;
+}
+
+export interface FavoriteModel {
+  /** Provider instance id, matching web's `favorites[].provider`. */
+  readonly provider: string;
+  readonly model: string;
 }
 
 export class MobilePreferencesLoadError extends Schema.TaggedError<MobilePreferencesLoadError>()(
@@ -105,6 +113,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     planModeEnabled?: boolean;
     threadListSettledShelfExpanded?: boolean;
     threadListSnoozedShelfExpanded?: boolean;
+    favoriteModels?: ReadonlyArray<FavoriteModel>;
   } = {};
 
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
@@ -180,6 +189,15 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (typeof parsed.threadListSnoozedShelfExpanded === "boolean") {
     preferences.threadListSnoozedShelfExpanded = parsed.threadListSnoozedShelfExpanded;
+  }
+  if (Array.isArray(parsed.favoriteModels)) {
+    preferences.favoriteModels = parsed.favoriteModels.filter(
+      (favorite): favorite is FavoriteModel =>
+        typeof favorite === "object" &&
+        favorite !== null &&
+        typeof favorite.provider === "string" &&
+        typeof favorite.model === "string",
+    );
   }
   return preferences;
 }
