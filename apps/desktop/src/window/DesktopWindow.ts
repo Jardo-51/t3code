@@ -84,7 +84,7 @@ export class DesktopWindow extends Context.Service<
     readonly activate: Effect.Effect<void, DesktopWindowError>;
     readonly createMainIfBackendReady: Effect.Effect<void, DesktopWindowError>;
     // Show a lightweight "Connecting to WSL" splash window immediately (wsl-only
-    // mode), before the WSL backend that serves the renderer is ready. It is
+    // mode), before the WSL backend that acts as the primary is ready. It is
     // dismissed automatically once the real main window reveals.
     readonly showConnectingSplash: Effect.Effect<void>;
     // Marks the primary backend as ready so `createMainIfBackendReady` and the
@@ -505,52 +505,81 @@ export const make = Effect.gen(function* () {
       webPreferences.contextIsolation = false;
     });
 
-    window.webContents.on("context-menu", (event, params) => {
-      event.preventDefault();
+    const contextMenuContents = new WeakSet<Electron.WebContents>();
+    const installContextMenu = (
+      ownerWindow: Electron.BrowserWindow,
+      contents: Electron.WebContents,
+    ): void => {
+      if (contextMenuContents.has(contents)) return;
+      contextMenuContents.add(contents);
+      contents.on("context-menu", (event, params) => {
+        event.preventDefault();
+        if (contents.isDestroyed() || ownerWindow.isDestroyed()) return;
+        // Native editing roles act on the focused contents, which may still be
+        // the host renderer when the user right-clicks inside a browser guest.
+        contents.focus();
 
-      const menuTemplate: Electron.MenuItemConstructorOptions[] = [];
+        const menuTemplate: Electron.MenuItemConstructorOptions[] = [];
 
-      if (params.misspelledWord) {
-        for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
-          menuTemplate.push({
-            label: suggestion,
-            click: () => window.webContents.replaceMisspelling(suggestion),
-          });
+        if (params.misspelledWord) {
+          for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+            menuTemplate.push({
+              label: suggestion,
+              click: () => {
+                if (!contents.isDestroyed()) contents.replaceMisspelling(suggestion);
+              },
+            });
+          }
+          if (params.dictionarySuggestions.length === 0) {
+            menuTemplate.push({ label: "No suggestions", enabled: false });
+          }
+          menuTemplate.push({ type: "separator" });
         }
-        if (params.dictionarySuggestions.length === 0) {
-          menuTemplate.push({ label: "No suggestions", enabled: false });
-        }
-        menuTemplate.push({ type: "separator" });
-      }
 
-      if (Option.isSome(ElectronShell.parseSafeExternalUrl(params.linkURL))) {
-        menuTemplate.push(
-          {
-            label: "Copy Link",
-            click: () => {
-              void runPromise(electronShell.copyText(params.linkURL));
+        if (Option.isSome(ElectronShell.parseSafeExternalUrl(params.linkURL))) {
+          menuTemplate.push(
+            {
+              label: "Copy Link",
+              click: () => {
+                void runPromise(electronShell.copyText(params.linkURL));
+              },
             },
-          },
-          { type: "separator" },
+            { type: "separator" },
+          );
+        }
+
+        if (params.mediaType === "image") {
+          menuTemplate.push({
+            label: "Copy Image",
+            click: () => {
+              if (!contents.isDestroyed()) contents.copyImageAt(params.x, params.y);
+            },
+          });
+          menuTemplate.push({ type: "separator" });
+        }
+
+        menuTemplate.push(
+          { role: "cut", enabled: params.editFlags.canCut },
+          { role: "copy", enabled: params.editFlags.canCopy },
+          { role: "paste", enabled: params.editFlags.canPaste },
+          { role: "selectAll", enabled: params.editFlags.canSelectAll },
         );
-      }
 
-      if (params.mediaType === "image") {
-        menuTemplate.push({
-          label: "Copy Image",
-          click: () => window.webContents.copyImageAt(params.x, params.y),
-        });
-        menuTemplate.push({ type: "separator" });
-      }
-
-      menuTemplate.push(
-        { role: "cut", enabled: params.editFlags.canCut },
-        { role: "copy", enabled: params.editFlags.canCopy },
-        { role: "paste", enabled: params.editFlags.canPaste },
-        { role: "selectAll", enabled: params.editFlags.canSelectAll },
-      );
-
-      void runPromise(electronMenu.popupTemplate({ window, template: menuTemplate }));
+        void runPromise(
+          electronMenu.popupTemplate({
+            window: ownerWindow,
+            template: menuTemplate,
+            ...(params.frame ? { frame: params.frame } : {}),
+          }),
+        );
+      });
+      contents.on("did-create-window", (popup) => {
+        installContextMenu(popup, popup.webContents);
+      });
+    };
+    installContextMenu(window, window.webContents);
+    window.webContents.on("did-attach-webview", (_event, contents) => {
+      installContextMenu(window, contents);
     });
 
     window.webContents.setWindowOpenHandler(({ url }) => {
@@ -809,9 +838,15 @@ export const make = Effect.gen(function* () {
     return window;
   }).pipe(Effect.withSpan("desktop.window.revealOrCreateMain"));
 
+  // With the local environment disabled there is no backend to wait for: the
+  // renderer is served from bundled assets and only talks to remote environments.
+  const waitingForBackend = Effect.gen(function* () {
+    if (yield* Ref.get(backendReadyRef)) return false;
+    return (yield* desktopSettings.get).localEnvironmentEnabled;
+  });
+
   const createMainIfBackendReady = Effect.gen(function* () {
-    const backendReady = yield* Ref.get(backendReadyRef);
-    if (!backendReady) return;
+    if (yield* waitingForBackend) return;
     const existingWindow = yield* currentMainWindow;
     if (Option.isSome(existingWindow)) return;
     yield* createMain;
@@ -869,7 +904,7 @@ export const make = Effect.gen(function* () {
     { reveal = true }: { readonly reveal?: boolean } = {},
   ) {
     const existingWindow = yield* reveal ? focusedMainWindow : electronWindow.main;
-    if (Option.isNone(existingWindow) && (!reveal || !(yield* Ref.get(backendReadyRef)))) return;
+    if (Option.isNone(existingWindow) && (!reveal || (yield* waitingForBackend))) return;
     const targetWindow = Option.isSome(existingWindow) ? existingWindow.value : yield* ensureMain;
     if (targetWindow.isDestroyed()) return;
     const send = Effect.sync(() => {
