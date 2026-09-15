@@ -7,6 +7,8 @@
 
 ## Issues
 
+- [[Bug]: New threads in the same project do not preserve the last-used model and working-mode settings](https://github.com/pingdotgg/t3code/issues/6508)
+
 ## Discussions
 
 - [Show separate charts and cost values for multiple configured Claude providers (do not combine them)](https://github.com/pingdotgg/t3code/discussions/11561)
