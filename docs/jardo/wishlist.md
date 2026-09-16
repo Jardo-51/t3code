@@ -4,6 +4,7 @@
 
 - [feat(web): add per-commit diff views](https://github.com/pingdotgg/t3code/pull/6102)
 - [fix(web): restore thread scroll position](https://github.com/pingdotgg/t3code/pull/10340)
+- [feat(usage): mark the even-pace point on pooled limit bars](https://github.com/pingdotgg/t3code/pull/11063)
 
 ## Issues
 
