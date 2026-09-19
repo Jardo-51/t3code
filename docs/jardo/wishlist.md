@@ -3,7 +3,6 @@
 ## PRs
 
 - [feat(web): add per-commit diff views](https://github.com/pingdotgg/t3code/pull/6102)
-- [fix(web): restore thread scroll position](https://github.com/pingdotgg/t3code/pull/10340)
 - [feat(usage): mark the even-pace point on pooled limit bars](https://github.com/pingdotgg/t3code/pull/11063)
 
 ## Issues
@@ -12,6 +11,7 @@
 
 ## Discussions
 
+- [[Feature]: Link threads to issues and auto-settle when the issue closes](https://github.com/pingdotgg/t3code/discussions/11785)
 - [Show separate charts and cost values for multiple configured Claude providers (do not combine them)](https://github.com/pingdotgg/t3code/discussions/11561)
 - [[Feature]: Scheduled Prompts](https://github.com/pingdotgg/t3code/discussions/6748)
 - [[Feature]: visual interface for subagents](https://github.com/pingdotgg/t3code/discussions/6858)
