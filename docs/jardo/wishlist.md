@@ -8,6 +8,7 @@
 ## Issues
 
 - [[Bug]: New threads in the same project do not preserve the last-used model and working-mode settings](https://github.com/pingdotgg/t3code/issues/6508)
+- [[Bug]: Completion sound fires when subagents or monitors finish, even though the agent resumes working](https://github.com/pingdotgg/t3code/issues/13625)
 
 ## Discussions
 
@@ -19,4 +20,3 @@
 - [[Feature]: Model unsent drafts as real threads in a draft state, shown in Sidebar V2](https://github.com/pingdotgg/t3code/discussions/6895)
 - [[Feature]: Add a Git history view](https://github.com/pingdotgg/t3code/discussions/6943)
 - [[Feature]: Add supported retention and compaction for unbounded local SQLite growth](https://github.com/pingdotgg/t3code/discussions/6897)
-- [[Feature]: Restore transcript and open-file scroll positions when switching sessions](https://github.com/pingdotgg/t3code/discussions/6952)
