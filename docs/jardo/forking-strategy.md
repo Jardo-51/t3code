@@ -338,7 +338,9 @@ database. Write them to survive that:
 - Prefix custom tables, columns, and indexes with `j_` so future upstream schema cannot clash with
   them.
 - Prefer own tables linked by ID (e.g. `thread_id`) over adding columns to upstream tables. Upstream
-  migrations sometimes rebuild or backfill their tables.
+  migrations sometimes rebuild or backfill their tables. Keep those links as plain columns, never
+  `FOREIGN KEY` constraints: upstream drops and recreates tables with `foreign_keys = ON`, which
+  either cascades away the fork rows or makes the upstream migration fail. Clean up orphans in code.
 - Guard schema changes, e.g. check `PRAGMA table_info` before `ALTER TABLE ... ADD COLUMN`.
 - Keep reads of upstream tables minimal, and expect to adjust them when upstream changes those
   tables.
