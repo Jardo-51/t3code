@@ -331,6 +331,11 @@ from 1 and records into its own `j_sql_migrations` table, so neither track's hig
 the other's migrations. Add each migration as `JardoForkMigrations/NNN_Name.ts` and list it there the
 same way `Migrations.ts` does. The SQLite layer runs the track right after upstream's.
 
+Use this track only for schema that stays in the fork. Upstream-bound work writes an upstream-style
+`Migrations/NNN_` entry so promotion stays a plain cherry-pick, and waits for upstream to merge it
+before it lands in `custom/main`: until then, upstream's own next migration can claim the same ID,
+and whichever runs second on a database is silently skipped.
+
 Fork migrations always run after **all** upstream migrations, so their order relative to upstream is
 not fixed over time: one written when upstream was at 51 runs after upstream's 60 on a fresh
 database. Write them to survive that:
