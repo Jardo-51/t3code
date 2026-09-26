@@ -345,5 +345,7 @@ database. Write them to survive that:
 - Keep reads of upstream tables minimal, and expect to adjust them when upstream changes those
   tables.
 
-Reverting a database to plain upstream stays safe: upstream never reads `j_sql_migrations` or `j_*`
-tables.
+Reverting a database to plain upstream stays safe as long as fork migrations only add `j_` tables,
+indexes on them, and nullable or defaulted `j_` columns. Upstream never reads `j_*` objects, but a
+constraint, trigger, or unique index a fork migration puts on an upstream table can make upstream's
+own writes or migrations fail.
