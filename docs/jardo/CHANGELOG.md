@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.43-nightly.20260926.2282-jardo.1] - Unreleased
 
+### Added
+
+- [#9](https://github.com/Jardo-51/t3code/issues/9) Custom DB migration track for this fork to avoid conflicts with upstream. See [docs](forking-strategy.md#custom-database-migrations).
+
 ## [0.0.41-nightly.20260908.1377-jardo.1] - 2026-09-11
 
 This version is functionally equivalent to upstream (contains no additional fixes/functionality).
