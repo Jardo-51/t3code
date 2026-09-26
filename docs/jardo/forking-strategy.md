@@ -316,3 +316,41 @@ touched adopted code: build, run the tests, and grep for identifiers the PR intr
   `custom/feature/*` branch per concern, and no custom dependencies in the ones headed upstream.
   Every branch now starts from the same base, so nothing forces this on you; untangling a mixed
   branch at promotion time is far more expensive than keeping it clean while writing it.
+
+## Custom database migrations
+
+Fork-only schema changes do not go into upstream's list in
+[`Migrations.ts`](../../apps/server/src/persistence/Migrations.ts). Effect's migrator records only
+the highest applied ID and skips everything at or below it, so any number we pick breaks something:
+the next free ID collides with upstream's next migration, a high offset makes every later upstream
+migration count as already applied, and non-integer IDs are silently dropped by the loader.
+
+They go into a separate track instead,
+[`JardoForkMigrations.ts`](../../apps/server/src/persistence/JardoForkMigrations.ts), which numbers
+from 1 and records into its own `j_sql_migrations` table, so neither track's high-water mark can hide
+the other's migrations. Add each migration as `JardoForkMigrations/NNN_Name.ts` and list it there the
+same way `Migrations.ts` does. The SQLite layer runs the track right after upstream's.
+
+Use this track only for schema that stays in the fork. Upstream-bound work writes an upstream-style
+`Migrations/NNN_` entry so promotion stays a plain cherry-pick, and waits for upstream to merge it
+before it lands in `custom/main`: until then, upstream's own next migration can claim the same ID,
+and whichever runs second on a database is silently skipped.
+
+Fork migrations always run after **all** upstream migrations, so their order relative to upstream is
+not fixed over time: one written when upstream was at 51 runs after upstream's 60 on a fresh
+database. Write them to survive that:
+
+- Prefix custom tables, columns, and indexes with `j_` so future upstream schema cannot clash with
+  them.
+- Prefer own tables linked by ID (e.g. `thread_id`) over adding columns to upstream tables. Upstream
+  migrations sometimes rebuild or backfill their tables. Keep those links as plain columns, never
+  `FOREIGN KEY` constraints: upstream drops and recreates tables with `foreign_keys = ON`, which
+  either cascades away the fork rows or makes the upstream migration fail. Clean up orphans in code.
+- Guard schema changes, e.g. check `PRAGMA table_info` before `ALTER TABLE ... ADD COLUMN`.
+- Keep reads of upstream tables minimal, and expect to adjust them when upstream changes those
+  tables.
+
+Reverting a database to plain upstream stays safe as long as fork migrations only add `j_` tables,
+indexes on them, and nullable or defaulted `j_` columns. Upstream never reads `j_*` objects, but a
+constraint, trigger, or unique index a fork migration puts on an upstream table can make upstream's
+own writes or migrations fail.
