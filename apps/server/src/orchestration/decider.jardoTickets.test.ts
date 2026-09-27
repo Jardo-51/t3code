@@ -117,9 +117,9 @@ it.layer(NodeServices.layer)("ticket link decider", (it) => {
   );
 
   it.effect.each([
-    ["a non-http URL", "file:///etc/passwd"],
-    ["a non-canonical URL", "https://acme.atlassian.net/browse/proj-1?x=1"],
-  ])("rejects linking %s", ([, url]) =>
+    { name: "a non-http URL", url: "file:///etc/passwd" },
+    { name: "a non-canonical URL", url: "https://acme.atlassian.net/browse/proj-1?x=1" },
+  ])("rejects linking $name", ({ url }) =>
     Effect.gen(function* () {
       const error = yield* decideOrchestrationCommand({
         command: {

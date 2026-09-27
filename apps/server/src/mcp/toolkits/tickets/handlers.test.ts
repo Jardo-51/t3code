@@ -109,7 +109,7 @@ const makeHarness = Effect.fn("makeTicketsToolkitHarness")(function* (
         threadId: THREAD_ID,
         providerSessionId: "provider-session-1",
         providerInstanceId: ProviderInstanceId.make("codex"),
-        capabilities: new Set(["pull-requests"]),
+        capabilities: new Set<McpInvocationContext.McpCapability>(["pull-requests"]),
         issuedAt: 1,
       }),
       Effect.provide(dependencies),
