@@ -3285,12 +3285,56 @@ describe("ClaudeAdapterLive", () => {
         ? `${event.payload.state}:${event.payload.reason ?? ""}`
         : undefined;
 
-    // A turn that launches a background shell and ends while it runs, then the
-    // shell settling the way the CLI reports it: task_updated before
+    const backgroundTaskStarted = (extra: Record<string, unknown> = {}) =>
+      ({
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-bg",
+        description: "Watch the build",
+        task_type: "local_bash",
+        uuid: "task-bg-started",
+        session_id: "sdk-session",
+        ...extra,
+      }) as unknown as SDKMessage;
+
+    const turnResult = (uuid: string) =>
+      ({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "sdk-session",
+        uuid,
+      }) as unknown as SDKMessage;
+
+    // The shell settling the way the CLI reports it: task_updated before
     // task_notification.
-    const settleBackgroundTaskAfterTurn = (
+    const backgroundTaskSettled = [
+      {
+        type: "system",
+        subtype: "task_updated",
+        task_id: "task-bg",
+        patch: { status: "completed" },
+        uuid: "task-bg-updated",
+        session_id: "sdk-session",
+      },
+      {
+        type: "system",
+        subtype: "task_notification",
+        task_id: "task-bg",
+        status: "completed",
+        output_file: "/tmp/task-bg.output",
+        summary: "done",
+        uuid: "task-bg-notified",
+        session_id: "sdk-session",
+      },
+    ] as unknown as ReadonlyArray<SDKMessage>;
+
+    // Runs one turn that feeds `messages` and settles task-bg along the way.
+    const runTurnSettlingTask = (
       harness: ReturnType<typeof makeHarness>,
       observed: Effect.Success<ReturnType<typeof observeEvents>>,
+      messages: ReadonlyArray<SDKMessage>,
     ) =>
       Effect.gen(function* () {
         const adapter = yield* ClaudeAdapter;
@@ -3302,46 +3346,26 @@ describe("ClaudeAdapterLive", () => {
         yield* adapter.sendTurn({ threadId: session.threadId, input: "watch", attachments: [] });
 
         const turnCompleted = yield* observed.waitFor((event) => event.type === "turn.completed");
-        harness.query.emit({
-          type: "system",
-          subtype: "task_started",
-          task_id: "task-bg",
-          description: "Watch the build",
-          task_type: "local_bash",
-          uuid: "task-bg-started",
-          session_id: "sdk-session",
-        } as unknown as SDKMessage);
-        harness.query.emit({
-          type: "result",
-          subtype: "success",
-          is_error: false,
-          errors: [],
-          session_id: "sdk-session",
-          uuid: "result-waiting",
-        } as unknown as SDKMessage);
-        yield* Deferred.await(turnCompleted);
-
         const taskCompleted = yield* observed.waitFor((event) => event.type === "task.completed");
-        harness.query.emit({
-          type: "system",
-          subtype: "task_updated",
-          task_id: "task-bg",
-          patch: { status: "completed" },
-          uuid: "task-bg-updated",
-          session_id: "sdk-session",
-        } as unknown as SDKMessage);
-        harness.query.emit({
-          type: "system",
-          subtype: "task_notification",
-          task_id: "task-bg",
-          status: "completed",
-          output_file: "/tmp/task-bg.output",
-          summary: "done",
-          uuid: "task-bg-notified",
-          session_id: "sdk-session",
-        } as unknown as SDKMessage);
+        for (const message of messages) {
+          harness.query.emit(message);
+        }
+        yield* Deferred.await(turnCompleted);
         yield* Deferred.await(taskCompleted);
       });
+
+    // A turn that launches a background shell and ends while it runs, then the
+    // shell settling.
+    const settleBackgroundTaskAfterTurn = (
+      harness: ReturnType<typeof makeHarness>,
+      observed: Effect.Success<ReturnType<typeof observeEvents>>,
+      launch: ReadonlyArray<SDKMessage> = [backgroundTaskStarted()],
+    ) =>
+      runTurnSettlingTask(harness, observed, [
+        ...launch,
+        turnResult("result-waiting"),
+        ...backgroundTaskSettled,
+      ]);
 
     it.effect("holds the session running until the CLI opens the wake-up turn", () => {
       const harness = makeHarness();
@@ -3406,6 +3430,60 @@ describe("ClaudeAdapterLive", () => {
           observed.events.filter((event) => reasonOf(event) === "running:background_task_settled")
             .length,
           1,
+        );
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    });
+
+    it.effect.each([
+      {
+        name: "a task settling while the turn is still running",
+        messages: [backgroundTaskStarted(), ...backgroundTaskSettled, turnResult("result-turn")],
+      },
+      {
+        name: "a task launched inside a subagent",
+        messages: [
+          backgroundTaskStarted({
+            task_id: "task-agent",
+            task_type: "local_agent",
+            tool_use_id: "toolu_agent",
+            uuid: "task-agent-started",
+          }),
+          {
+            type: "stream_event",
+            session_id: "sdk-session",
+            uuid: "subagent-bash-start",
+            parent_tool_use_id: "toolu_agent",
+            event: {
+              type: "content_block_start",
+              index: 0,
+              content_block: { type: "tool_use", id: "toolu_bash", name: "Bash", input: {} },
+            },
+          } as unknown as SDKMessage,
+          backgroundTaskStarted({ tool_use_id: "toolu_bash" }),
+          turnResult("result-turn"),
+          ...backgroundTaskSettled,
+        ],
+      },
+      {
+        name: "a skip-transcript task",
+        messages: [
+          backgroundTaskStarted({ skip_transcript: true }),
+          turnResult("result-turn"),
+          ...backgroundTaskSettled,
+        ],
+      },
+    ])("does not hold the session for $name", ({ messages }) => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const observed = yield* observeEvents(adapter);
+        yield* runTurnSettlingTask(harness, observed, messages);
+
+        assert.isFalse(
+          observed.events.some((event) => reasonOf(event) === "running:background_task_settled"),
         );
       }).pipe(
         Effect.provideService(Random.Random, makeDeterministicRandomService()),
