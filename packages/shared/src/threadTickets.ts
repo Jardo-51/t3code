@@ -33,10 +33,11 @@ function parseHttpUrl(targetUrl: string): URL | null {
 /**
  * The key and canonical URL of a ticket on a tracker whose URLs name the ticket, or null.
  *
- * Only the URL is read; no tracker is contacted. The canonical URL drops whatever a tracker adds
- * around the ticket (board views, comment anchors, slugs) so two links to the same ticket compare
- * equal. Unlike change-request parsing, a loose match costs nothing here: the caller already
- * decided the URL is a ticket, this only names it.
+ * Only the URL is read; no tracker is contacted. For a known tracker the canonical URL drops
+ * whatever it adds around the ticket (board views, comment anchors, slugs) so two links to the
+ * same ticket compare equal. Unlike change-request parsing, a loose match on an unknown tracker
+ * costs nothing: the caller already decided the URL is a ticket, this only names it and keeps
+ * the URL.
  */
 export function parseTicketUrl(targetUrl: string): TicketReference | null {
   const url = parseHttpUrl(targetUrl);
@@ -90,15 +91,12 @@ export function parseTicketUrl(targetUrl: string): TicketReference | null {
       url: `${url.origin}/${issue[1]}/${issue[2]}/issues/${issue[3]}`,
     };
   }
-  // Anything else that names a KEY-123 style ticket in its path (YouTrack and the like).
-  const segments = segmentsOf(path);
-  const keyIndex = segments.findIndex((segment) => KEY_PATTERN.test(segment));
-  if (keyIndex !== -1) {
-    const key = segments[keyIndex]!.toUpperCase();
-    return {
-      key,
-      url: `${url.origin}/${[...segments.slice(0, keyIndex), key].join("/")}`,
-    };
+  // Anything else that names a KEY-123 style ticket in its path (YouTrack and the like). Only
+  // the label is derived: the URL is kept as given (minus the fragment), since an unknown
+  // tracker's path may be case-sensitive or need the segments and query after the key.
+  const keySegment = segmentsOf(path).find((segment) => KEY_PATTERN.test(segment));
+  if (keySegment !== undefined) {
+    return { key: keySegment.toUpperCase(), url: `${url.origin}${url.pathname}${url.search}` };
   }
   return null;
 }

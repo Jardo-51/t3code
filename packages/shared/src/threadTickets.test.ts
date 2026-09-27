@@ -50,10 +50,27 @@ describe("parseTicketUrl", () => {
       { key: "Proj#78", url: "https://org.visualstudio.com/Proj/_workitems/edit/78" },
     ],
     [
-      "https://youtrack.example.com/issue/abc-5/Some-title",
-      { key: "ABC-5", url: "https://youtrack.example.com/issue/ABC-5" },
+      "https://youtrack.example.com/issue/abc-5/Some-title#comment",
+      { key: "ABC-5", url: "https://youtrack.example.com/issue/abc-5/Some-title" },
     ],
   ])("names %s", (input, expected) => {
+    expect(parseTicketUrl(input)).toEqual(expected);
+  });
+
+  it.each([
+    [
+      "https://gitlab.com/group/repo-2/-/merge_requests/5",
+      { key: "REPO-2", url: "https://gitlab.com/group/repo-2/-/merge_requests/5" },
+    ],
+    [
+      "https://tree.taiga.io/project/acme-2024/us/42",
+      { key: "ACME-2024", url: "https://tree.taiga.io/project/acme-2024/us/42" },
+    ],
+    [
+      "https://tracker.example/view/abc-5?tab=history",
+      { key: "ABC-5", url: "https://tracker.example/view/abc-5?tab=history" },
+    ],
+  ])("keeps an unknown tracker's URL for %s", (input, expected) => {
     expect(parseTicketUrl(input)).toEqual(expected);
   });
 
