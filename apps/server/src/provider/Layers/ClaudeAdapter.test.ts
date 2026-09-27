@@ -3255,6 +3255,165 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  describe("background work settling after the turn", () => {
+    const observeEvents = (adapter: ClaudeAdapterShape) =>
+      Effect.gen(function* () {
+        const events: Array<ProviderRuntimeEvent> = [];
+        const waiters: Array<{
+          readonly matches: (event: ProviderRuntimeEvent) => boolean;
+          readonly done: Deferred.Deferred<void>;
+        }> = [];
+        yield* Stream.runForEach(adapter.streamEvents, (event) =>
+          Effect.gen(function* () {
+            events.push(event);
+            for (const waiter of waiters) {
+              if (waiter.matches(event)) yield* Deferred.succeed(waiter.done, undefined);
+            }
+          }),
+        ).pipe(Effect.forkChild);
+        const waitFor = (matches: (event: ProviderRuntimeEvent) => boolean) =>
+          Effect.gen(function* () {
+            const done = yield* Deferred.make<void>();
+            waiters.push({ matches, done });
+            return done;
+          });
+        return { events, waitFor };
+      });
+
+    const reasonOf = (event: ProviderRuntimeEvent | undefined) =>
+      event?.type === "session.state.changed"
+        ? `${event.payload.state}:${event.payload.reason ?? ""}`
+        : undefined;
+
+    // A turn that launches a background shell and ends while it runs, then the
+    // shell settling the way the CLI reports it: task_updated before
+    // task_notification.
+    const settleBackgroundTaskAfterTurn = (
+      harness: ReturnType<typeof makeHarness>,
+      observed: Effect.Success<ReturnType<typeof observeEvents>>,
+    ) =>
+      Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const session = yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: ProviderDriverKind.make("claudeAgent"),
+          runtimeMode: "full-access",
+        });
+        yield* adapter.sendTurn({ threadId: session.threadId, input: "watch", attachments: [] });
+
+        const turnCompleted = yield* observed.waitFor((event) => event.type === "turn.completed");
+        harness.query.emit({
+          type: "system",
+          subtype: "task_started",
+          task_id: "task-bg",
+          description: "Watch the build",
+          task_type: "local_bash",
+          uuid: "task-bg-started",
+          session_id: "sdk-session",
+        } as unknown as SDKMessage);
+        harness.query.emit({
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          errors: [],
+          session_id: "sdk-session",
+          uuid: "result-waiting",
+        } as unknown as SDKMessage);
+        yield* Deferred.await(turnCompleted);
+
+        const taskCompleted = yield* observed.waitFor((event) => event.type === "task.completed");
+        harness.query.emit({
+          type: "system",
+          subtype: "task_updated",
+          task_id: "task-bg",
+          patch: { status: "completed" },
+          uuid: "task-bg-updated",
+          session_id: "sdk-session",
+        } as unknown as SDKMessage);
+        harness.query.emit({
+          type: "system",
+          subtype: "task_notification",
+          task_id: "task-bg",
+          status: "completed",
+          output_file: "/tmp/task-bg.output",
+          summary: "done",
+          uuid: "task-bg-notified",
+          session_id: "sdk-session",
+        } as unknown as SDKMessage);
+        yield* Deferred.await(taskCompleted);
+      });
+
+    it.effect("holds the session running until the CLI opens the wake-up turn", () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const observed = yield* observeEvents(adapter);
+        yield* settleBackgroundTaskAfterTurn(harness, observed);
+
+        // The hold lands before the event that clears the thread's background
+        // liveness, so the thread never reads as ready in between.
+        const holdIndex = observed.events.findIndex(
+          (event) => reasonOf(event) === "running:background_task_settled",
+        );
+        const settledIndex = observed.events.findIndex((event) => event.type === "task.updated");
+        assert.isAtLeast(holdIndex, 0);
+        assert.isBelow(holdIndex, settledIndex);
+
+        const configured = yield* observed.waitFor((event) => event.type === "session.configured");
+        harness.query.emit({
+          type: "system",
+          subtype: "init",
+          session_id: "sdk-session",
+          uuid: "init-wake",
+        } as unknown as SDKMessage);
+        yield* Deferred.await(configured);
+        yield* TestClock.adjust("10 seconds");
+
+        const wakeTurnStarted = yield* observed.waitFor((event) => event.type === "turn.started");
+        harness.query.emit({
+          type: "assistant",
+          session_id: "sdk-session",
+          uuid: "assistant-wake",
+          parent_tool_use_id: null,
+          message: { id: "assistant-wake-message", content: [{ type: "text", text: "Done" }] },
+        } as unknown as SDKMessage);
+        yield* Deferred.await(wakeTurnStarted);
+
+        assert.isFalse(
+          observed.events.some((event) => reasonOf(event) === "ready:background_wake_timeout"),
+        );
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    });
+
+    it.effect("releases the hold when the CLI never wakes", () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const observed = yield* observeEvents(adapter);
+        yield* settleBackgroundTaskAfterTurn(harness, observed);
+
+        const released = yield* observed.waitFor(
+          (event) => reasonOf(event) === "ready:background_wake_timeout",
+        );
+        yield* TestClock.adjust("10 seconds");
+        yield* Deferred.await(released);
+
+        // Both settle events for the one task produce a single hold.
+        assert.equal(
+          observed.events.filter((event) => reasonOf(event) === "running:background_task_settled")
+            .length,
+          1,
+        );
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    });
+  });
+
   it.effect("keeps the session available when process close fails", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
