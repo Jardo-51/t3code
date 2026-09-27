@@ -268,6 +268,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["combine matching repositories environments sidebar"],
   },
   {
+    id: "sidebar-pull-request-badges",
+    title: "Pull requests in sidebar",
+    to: "/settings/general",
+    searchTerms: ["show pr badge link thread row sidebar"],
+  },
+  {
+    id: "sidebar-ticket-badges",
+    title: "Tickets in sidebar",
+    to: "/settings/general",
+    searchTerms: ["show ticket issue jira linear badge link thread row sidebar"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",

@@ -140,6 +140,7 @@ import {
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { ScopedSwitch } from "./ScopedSwitch";
+import { SidebarLinkBadgeSettings } from "../tickets/SidebarLinkBadgeSettings";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ThemeLibrary } from "./ThemeSettings";
@@ -564,6 +565,12 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Auto-settle merged threads"]
         : []),
       ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? ["Word wrap"] : []),
+      ...(settings.jSidebarShowPullRequests !== DEFAULT_UNIFIED_SETTINGS.jSidebarShowPullRequests
+        ? ["Pull requests in sidebar"]
+        : []),
+      ...(settings.jSidebarShowTickets !== DEFAULT_UNIFIED_SETTINGS.jSidebarShowTickets
+        ? ["Tickets in sidebar"]
+        : []),
       ...getChangedTypographySettingLabels(settings),
       ...(settings.diffFilesCollapsed !== DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed
         ? ["Default diff file state"]
@@ -682,6 +689,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.notificationMode,
       settings.inAppNotificationsEnabled,
       settings.wordWrap,
+      settings.jSidebarShowPullRequests,
+      settings.jSidebarShowTickets,
       followSystem,
       theme,
       themeHalves,
@@ -774,6 +783,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
+      jSidebarShowPullRequests: DEFAULT_UNIFIED_SETTINGS.jSidebarShowPullRequests,
+      jSidebarShowTickets: DEFAULT_UNIFIED_SETTINGS.jSidebarShowTickets,
       responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
       enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
       continueThreadsAfterServerUpdate: DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate,
@@ -2227,6 +2238,7 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+        <SidebarLinkBadgeSettings />
 
         {supportsAutoSettlement ? (
           <>

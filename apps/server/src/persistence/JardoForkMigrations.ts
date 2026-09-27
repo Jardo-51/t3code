@@ -19,6 +19,8 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 
+import Migration0001 from "./JardoForkMigrations/001_ProjectionThreadTickets.ts";
+
 export const JARDO_FORK_MIGRATIONS_TABLE = "j_sql_migrations";
 
 export type JardoForkMigrationEntry = readonly [
@@ -27,7 +29,9 @@ export type JardoForkMigrationEntry = readonly [
   migration: Effect.Effect<void, SqlError, SqlClient.SqlClient>,
 ];
 
-const migrationEntries: ReadonlyArray<JardoForkMigrationEntry> = [];
+const migrationEntries: ReadonlyArray<JardoForkMigrationEntry> = [
+  [1, "ProjectionThreadTickets", Migration0001],
+];
 
 const run = Migrator.make({});
 

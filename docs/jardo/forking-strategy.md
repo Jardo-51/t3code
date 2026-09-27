@@ -350,7 +350,33 @@ database. Write them to survive that:
 - Keep reads of upstream tables minimal, and expect to adjust them when upstream changes those
   tables.
 
-Reverting a database to plain upstream stays safe as long as fork migrations only add `j_` tables,
+A database can be reverted to plain upstream as long as fork migrations only add `j_` tables,
 indexes on them, and nullable or defaulted `j_` columns. Upstream never reads `j_*` objects, but a
 constraint, trigger, or unique index a fork migration puts on an upstream table can make upstream's
 own writes or migrations fail.
+
+Fork-only event types are the exception. Upstream decodes every stored event against its own event
+union when it replays history, so once a fork event such as `thread.j-ticket-linked` is stored, a
+plain upstream server fails on that database. Reverting then takes one extra step, deleting the
+fork's events before upstream starts on the database:
+
+1. Stop the server and back up `state.sqlite`.
+2. Run `DELETE FROM orchestration_events WHERE event_type LIKE 'thread.j-%';`
+3. Optionally drop the fork's `j_` tables, such as `j_projection_thread_tickets` and
+   `j_sql_migrations`. Upstream ignores them anyway.
+
+This works because nothing depends on the deleted rows. `orchestration_events.sequence` is
+`AUTOINCREMENT`, so a gap is never reused, and the server already expects gaps in the global
+sequence. A stream's next `stream_version` is its latest one plus one, so a gap can't collide with a
+later event. No other event or upstream projection references fork events. What stays behind is
+harmless: the `updatedAt` bumps fork events wrote to `projection_threads`, and the `j_` tables if
+you keep them. This procedure has not been tested against an upstream server. Add new fork event
+types only when the feature needs event sourcing.
+
+The reasoning behind the `j_` prefix covers anything else that outlives one process or crosses to
+another version: fork-only orchestration command and event types (`thread.j-ticket.link`,
+`thread.j-ticket-linked`), environment capabilities (`jThreadTickets`) and persisted client settings
+(`jSidebarShowTickets`) carry a `j` marker. Stored events are replayed forever, so an upstream event
+that later took the same name with a different payload would make the fork's history undecodable.
+The marker is also what lets the revert procedure above select every fork event with one `LIKE`
+pattern.

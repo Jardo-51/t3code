@@ -25,6 +25,13 @@ import {
 } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
 import {
+  ThreadTicketLink,
+  ThreadTicketLinkCommand,
+  ThreadTicketLinkedPayload,
+  ThreadTicketUnlinkCommand,
+  ThreadTicketUnlinkedPayload,
+} from "./threadTickets.ts";
+import {
   PullRequestActor,
   PullRequestChecksState,
   PullRequestMergeability,
@@ -807,6 +814,8 @@ export const OrchestrationThread = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+  // Fork-only; optional so payloads from servers without ticket links still decode.
+  tickets: Schema.optional(Schema.Array(ThreadTicketLink)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -897,6 +906,8 @@ export const OrchestrationThreadShell = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+  // Fork-only; optional so payloads from servers without ticket links still decode.
+  tickets: Schema.optional(Schema.Array(ThreadTicketLink)),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -1444,6 +1455,8 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadMetaUpdateCommand,
   ThreadPullRequestLinkCommand,
   ThreadPullRequestUnlinkCommand,
+  ThreadTicketLinkCommand,
+  ThreadTicketUnlinkCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ThreadTurnStartCommand,
@@ -1478,6 +1491,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadMetaUpdateCommand,
   ThreadPullRequestLinkCommand,
   ThreadPullRequestUnlinkCommand,
+  ThreadTicketLinkCommand,
+  ThreadTicketUnlinkCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ClientThreadTurnStartCommand,
@@ -1707,6 +1722,8 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.pull-request-linked",
   "thread.pull-request-unlinked",
   "thread.pull-request-synced",
+  "thread.j-ticket-linked",
+  "thread.j-ticket-unlinked",
   "thread.runtime-mode-set",
   "thread.interaction-mode-set",
   "thread.message-sent",
@@ -2136,6 +2153,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.pull-request-synced"),
     payload: ThreadPullRequestSyncedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.j-ticket-linked"),
+    payload: ThreadTicketLinkedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.j-ticket-unlinked"),
+    payload: ThreadTicketUnlinkedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

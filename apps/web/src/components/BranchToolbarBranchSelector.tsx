@@ -60,6 +60,7 @@ import {
 } from "./ThreadStatusIndicators";
 import { Button } from "./ui/button";
 import { ComposerControl } from "./chat/ComposerControl";
+import { ComposerThreadTickets } from "./tickets/ThreadTicketBadge";
 import { Switch } from "./ui/switch";
 import { getVirtualizedScrollFadeClassName } from "./ui/scroll-area";
 import {
@@ -798,6 +799,7 @@ export function BranchToolbarBranchSelector({
             if (prUrl) openPrLink(event, prUrl);
           }}
         />
+        <ComposerThreadTickets threadRef={threadRef} tickets={serverThread?.tickets} />
         {/* Context menu lives on the wrapper: the disabled Button has
             pointer-events-none, so the trigger itself never sees right-clicks
             while refs are loading or a branch action is pending. */}

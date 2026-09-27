@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - [#9](https://github.com/Jardo-51/t3code/issues/9) Custom DB migration track for this fork to avoid conflicts with upstream. See [docs](forking-strategy.md#custom-database-migrations).
+- [#11](https://github.com/Jardo-51/t3code/issues/11) Link issue-tracker tickets (Jira, GitHub, etc.) to threads. Partly resolves [#11785](https://github.com/pingdotgg/t3code/discussions/11785). See [docs](ticket-links.md). Likely conflicts with [orchestrator V2](https://github.com/pingdotgg/t3code/pull/2829).
+
+### Fixed
+
+- Misaligned PR link in sidebar (promoted to upstream PR [#14007](https://github.com/pingdotgg/t3code/pull/14007)).
 
 ## [0.0.41-nightly.20260908.1377-jardo.1] - 2026-09-11
 

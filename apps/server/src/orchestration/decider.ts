@@ -21,6 +21,7 @@ import {
   threadPullRequestKeysEqual,
 } from "@t3tools/shared/threadPullRequests";
 import { compareDateTimeStrings } from "@t3tools/shared/dateTime";
+import { canonicalTicketUrl } from "@t3tools/shared/threadTickets";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -1151,6 +1152,78 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         payload: {
           threadId: command.threadId,
           ...key,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.j-ticket.link": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      // Every client dispatches here, so this is where a stored URL is kept canonical (duplicates
+      // compare equal, unlink finds it) and http(s) only, since the badge hands it to the OS.
+      // Unlink needs no such check: it only accepts a URL that is already linked.
+      if (canonicalTicketUrl(command.url) !== command.url) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `ticket URL must be a canonical http(s) URL: ${command.url}`,
+        });
+      }
+      if ((thread.tickets ?? []).some((ticket) => ticket.url === command.url)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `ticket ${command.url} is already linked to thread ${command.threadId}`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.j-ticket-linked",
+        payload: {
+          threadId: command.threadId,
+          link: {
+            url: command.url,
+            key: command.key,
+            source: command.source,
+            linkedAt: occurredAt,
+          },
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.j-ticket.unlink": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      if (!(thread.tickets ?? []).some((ticket) => ticket.url === command.url)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `ticket ${command.url} is not linked to thread ${command.threadId}`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.j-ticket-unlinked",
+        payload: {
+          threadId: command.threadId,
+          url: command.url,
           updatedAt: occurredAt,
         },
       };
