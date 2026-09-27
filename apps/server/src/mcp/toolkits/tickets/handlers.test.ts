@@ -160,6 +160,21 @@ describe("ticket toolkit handlers", () => {
     }),
   );
 
+  it.effect("reports an already linked ticket under the key it was stored with", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness(() => true);
+      const result = yield* harness.call("link_ticket", {
+        url: "https://linear.app/acme/issue/eng-2",
+        key: "Login bug",
+      });
+      expect(result).toEqual({
+        url: "https://linear.app/acme/issue/ENG-2",
+        key: "ENG-2",
+        alreadyLinked: true,
+      });
+    }),
+  );
+
   it.effect("unlinks by canonical URL and lists the thread's tickets", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();

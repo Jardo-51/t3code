@@ -88,7 +88,11 @@ const make = Effect.gen(function* () {
             Effect.catchTags({ OrchestrationCommandInvariantError: () => Effect.succeed(true) }),
             Effect.catchCause(dispatchFailure(TicketLinkFailedError)),
           );
-        return { ...ticket, alreadyLinked };
+        // A duplicate keeps the label it was stored under, so report that one.
+        const existing = alreadyLinked
+          ? (thread.tickets ?? []).find((entry) => entry.url === ticket.url)
+          : undefined;
+        return { url: ticket.url, key: existing?.key ?? ticket.key, alreadyLinked };
       }),
     unlink_ticket: (input) =>
       Effect.gen(function* () {
