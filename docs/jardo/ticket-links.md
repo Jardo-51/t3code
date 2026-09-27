@@ -13,7 +13,7 @@ there is nothing to configure and no credentials to provide.
   URL, for example when you paste it or the branch refers to it.
 - **Manually:** run **Link ticket to thread** from the command palette and paste the ticket's URL.
   Once a thread has tickets, the same command is called **Manage thread tickets**; it lists the
-  thread's tickets and unlinks them.
+  thread's tickets and unlinks them. Right-clicking a ticket under the composer opens it too.
 
 The ticket ID is read from the URL for Jira, Linear, GitHub, GitLab, Forgejo, Gitea, Bitbucket and
 Azure DevOps, and for any tracker whose URLs contain a `PROJ-123` style ID. For other trackers,

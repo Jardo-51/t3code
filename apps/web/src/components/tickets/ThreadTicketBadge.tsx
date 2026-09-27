@@ -9,6 +9,7 @@ import { ComposerControl } from "../chat/ComposerControl";
 import { InlineButton } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { openThreadTicketsDialog } from "./ThreadTicketsDialog";
 
 const NO_TICKETS: ReadonlyArray<ThreadTicketLink> = [];
 
@@ -16,19 +17,23 @@ const NO_TICKETS: ReadonlyArray<ThreadTicketLink> = [];
  * A linked ticket shown as its key. The caller owns the control it sits in through `render` (an
  * inline link in a sidebar row, a toolbar control in the composer); the badge makes it a link
  * that opens the ticket where the "Open links in" setting says. A plain modifier click is left to
- * the anchor so it still opens the system browser.
+ * the anchor so it still opens the system browser. With `manageOnContextMenu`, a right-click
+ * opens the thread's tickets dialog instead of the link menu.
  */
 export function ThreadTicketBadge({
   render,
   ticket,
   threadRef,
   others = NO_TICKETS,
+  manageOnContextMenu = false,
 }: {
   render: ReactElement<{ render?: useRender.RenderProp }>;
   ticket: ThreadTicketLink;
   threadRef: ScopedThreadRef;
   /** Further tickets on the thread that this badge stands in for, named in its tooltip. */
   others?: ReadonlyArray<ThreadTicketLink>;
+  /** Only where the tickets dialog is mounted, which is the chat view. */
+  manageOnContextMenu?: boolean;
 }) {
   const openLink = useOpenLink(threadRef);
   const control = useRender({
@@ -37,6 +42,14 @@ export function ThreadTicketBadge({
       render: <a href={ticket.url} target="_blank" rel="noopener noreferrer" />,
       "aria-label": `Open ticket ${ticket.key}`,
       onPointerDown: (event: MouseEvent<HTMLElement>) => event.stopPropagation(),
+      ...(manageOnContextMenu
+        ? {
+            onContextMenu: (event: MouseEvent<HTMLElement>) => {
+              event.preventDefault();
+              openThreadTicketsDialog(threadRef);
+            },
+          }
+        : {}),
       onClick: (event: MouseEvent<HTMLElement>) => {
         event.stopPropagation();
         if (event.metaKey || event.ctrlKey) return;
@@ -68,6 +81,9 @@ export function ThreadTicketBadge({
         {others.length === 0
           ? ticket.url
           : [ticket, ...others].map((entry) => entry.key).join(", ")}
+        {manageOnContextMenu ? (
+          <span className="block text-muted-foreground">Right-click to manage tickets</span>
+        ) : null}
       </TooltipPopup>
     </Tooltip>
   );
@@ -87,6 +103,7 @@ export function ComposerThreadTickets({
       render={<ComposerControl size="xs" />}
       ticket={ticket}
       threadRef={threadRef}
+      manageOnContextMenu
     />
   ));
 }
