@@ -3437,6 +3437,40 @@ describe("ClaudeAdapterLive", () => {
       );
     });
 
+    it.effect("releases the hold when the wake-up turn ends without a reply", () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const observed = yield* observeEvents(adapter);
+        yield* settleBackgroundTaskAfterTurn(harness, observed);
+
+        const configured = yield* observed.waitFor((event) => event.type === "session.configured");
+        harness.query.emit({
+          type: "system",
+          subtype: "init",
+          session_id: "sdk-session",
+          uuid: "init-wake",
+        } as unknown as SDKMessage);
+        yield* Deferred.await(configured);
+        // Past the fallback: the wake-up turn is open, so only its result may
+        // end the hold.
+        yield* TestClock.adjust("10 seconds");
+
+        const released = yield* observed.waitFor(
+          (event) => reasonOf(event) === "ready:background_wake_ended",
+        );
+        harness.query.emit(turnResult("result-wake"));
+        yield* Deferred.await(released);
+
+        assert.isFalse(
+          observed.events.some((event) => reasonOf(event) === "ready:background_wake_timeout"),
+        );
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    });
+
     it.effect.each([
       {
         name: "a task settling while the turn is still running",
