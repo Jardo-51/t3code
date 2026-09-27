@@ -71,7 +71,8 @@ function ThreadTicketsDialog({
   const trimmedUrl = url.trim();
   const isUrl = canonicalTicketUrl(trimmedUrl) !== null;
   const needsKey = isUrl && resolveTicketReference({ url: trimmedUrl }) === null;
-  const ticket = resolveTicketReference({ url: trimmedUrl, key });
+  // A key typed for an unrecognised URL must not relabel a recognised one pasted over it.
+  const ticket = resolveTicketReference({ url: trimmedUrl, key: needsKey ? key : undefined });
   const alreadyLinked = ticket !== null && tickets.some((entry) => entry.url === ticket.url);
   const validation = !dirty
     ? null
