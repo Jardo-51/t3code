@@ -71,7 +71,9 @@ export function ThreadTicketBadge({
       <TooltipTrigger render={control}>
         <span className="contents font-normal text-xs tabular-nums">
           <TicketIcon aria-hidden className="size-3 shrink-0" />
-          {ticket.key}
+          {/* An element, not bare text: bare text takes its line box from the control, which
+              inherits the row's size, so beside a text-sm title it sat below the other meta. */}
+          <span>{ticket.key}</span>
           {others.length > 0 ? (
             <span className="text-muted-foreground">+{others.length}</span>
           ) : null}
