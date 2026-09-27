@@ -3618,6 +3618,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   ) {
     const agent = context.taskAgents.get(taskId);
     if (
+      context.stopped ||
       context.turnState ||
       context.backgroundWakeHeld ||
       !context.liveTaskIds.has(taskId) ||
@@ -4429,6 +4430,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }
 
     yield* Queue.shutdown(context.promptQueue);
+    yield* cancelBackgroundWakeFallback(context);
 
     const streamFiber = context.streamFiber;
     context.streamFiber = undefined;
