@@ -116,6 +116,26 @@ it.layer(NodeServices.layer)("ticket link decider", (it) => {
     }),
   );
 
+  it.effect.each([
+    ["a non-http URL", "file:///etc/passwd"],
+    ["a non-canonical URL", "https://acme.atlassian.net/browse/proj-1?x=1"],
+  ])("rejects linking %s", ([, url]) =>
+    Effect.gen(function* () {
+      const error = yield* decideOrchestrationCommand({
+        command: {
+          type: "thread.j-ticket.link",
+          commandId: CommandId.make("cmd-link"),
+          threadId: THREAD_ID,
+          url,
+          key: "PROJ-1",
+          source: "manual",
+        },
+        readModel: makeReadModel(),
+      }).pipe(Effect.flip);
+      expect(error._tag).toBe("OrchestrationCommandInvariantError");
+    }),
+  );
+
   it.effect("unlinks only the named ticket, and rejects one that is not linked", () =>
     Effect.gen(function* () {
       const other: ThreadTicketLink = {
