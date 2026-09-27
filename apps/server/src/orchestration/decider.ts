@@ -1156,6 +1156,69 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "thread.j-ticket.link": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      if ((thread.tickets ?? []).some((ticket) => ticket.url === command.url)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `ticket ${command.url} is already linked to thread ${command.threadId}`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.j-ticket-linked",
+        payload: {
+          threadId: command.threadId,
+          link: {
+            url: command.url,
+            key: command.key,
+            source: command.source,
+            linkedAt: occurredAt,
+          },
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.j-ticket.unlink": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      if (!(thread.tickets ?? []).some((ticket) => ticket.url === command.url)) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `ticket ${command.url} is not linked to thread ${command.threadId}`,
+        });
+      }
+      const occurredAt = yield* nowIso;
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.j-ticket-unlinked",
+        payload: {
+          threadId: command.threadId,
+          url: command.url,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
     case "thread.pull-request-link.sync": {
       const thread = yield* requireThread({
         readModel,

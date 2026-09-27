@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - [#9](https://github.com/Jardo-51/t3code/issues/9) Custom DB migration track for this fork to avoid conflicts with upstream. See [docs](forking-strategy.md#custom-database-migrations).
+- [#11](https://github.com/Jardo-51/t3code/issues/11) Link issue-tracker tickets (Jira, Linear, GitHub/GitLab/Forgejo issues, Azure DevOps work items) to threads, manually or by the agent; shown under the composer and in the sidebar, and searchable. See [docs](ticket-links.md).
 
 ## [0.0.41-nightly.20260908.1377-jardo.1] - 2026-09-11
 

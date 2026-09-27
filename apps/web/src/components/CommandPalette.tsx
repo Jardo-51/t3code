@@ -56,6 +56,7 @@ import {
   SquarePenIcon,
   SunIcon,
   TextSearchIcon,
+  TicketIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -167,6 +168,7 @@ import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
+import { openThreadTicketsDialog } from "./tickets/ThreadTicketsDialog";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
 import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
@@ -1827,6 +1829,24 @@ function OpenCommandPaletteDialog(props: {
         },
       });
     }
+  }
+
+  if (
+    activeThread !== null &&
+    activeThreadServerConfig?.environment.capabilities.jThreadTickets === true
+  ) {
+    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    const hasTickets = (activeThread.tickets ?? []).length > 0;
+    actionItems.push({
+      kind: "action",
+      value: "action:thread-tickets",
+      searchTerms: ["link", "unlink", "ticket", "issue", "jira", "linear", "work item"],
+      title: hasTickets ? "Manage thread tickets" : "Link ticket to thread",
+      icon: <TicketIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        openThreadTicketsDialog(threadRef);
+      },
+    });
   }
 
   actionItems.push({

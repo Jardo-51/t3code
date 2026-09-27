@@ -13,6 +13,8 @@ import {
   OrchestrationMessage,
   OrchestrationSession,
   OrchestrationThread,
+  ThreadTicketLinkedPayload,
+  ThreadTicketUnlinkedPayload,
   WORKTREE_SETUP_ACTIVITY_KIND,
 } from "@t3tools/contracts";
 import {
@@ -740,6 +742,43 @@ export function projectEvent(
             ...nextBase,
             threads: updateThread(nextBase.threads, payload.threadId, {
               ...pullRequestsPatch(thread, pullRequests, nextBase.projects),
+              updatedAt: payload.updatedAt,
+            }),
+          };
+        }),
+      );
+
+    case "thread.j-ticket-linked":
+      return decodeForEvent(ThreadTicketLinkedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+          if (!thread) {
+            return nextBase;
+          }
+          return {
+            ...nextBase,
+            threads: updateThread(nextBase.threads, payload.threadId, {
+              tickets: [
+                ...(thread.tickets ?? []).filter((ticket) => ticket.url !== payload.link.url),
+                payload.link,
+              ],
+              updatedAt: payload.updatedAt,
+            }),
+          };
+        }),
+      );
+
+    case "thread.j-ticket-unlinked":
+      return decodeForEvent(ThreadTicketUnlinkedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+          if (!thread) {
+            return nextBase;
+          }
+          return {
+            ...nextBase,
+            threads: updateThread(nextBase.threads, payload.threadId, {
+              tickets: (thread.tickets ?? []).filter((ticket) => ticket.url !== payload.url),
               updatedAt: payload.updatedAt,
             }),
           };

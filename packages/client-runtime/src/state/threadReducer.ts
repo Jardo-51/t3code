@@ -327,6 +327,29 @@ export function applyThreadDetailEvent(
       );
     }
 
+    case "thread.j-ticket-linked":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          tickets: [
+            ...(thread.tickets ?? []).filter((ticket) => ticket.url !== event.payload.link.url),
+            event.payload.link,
+          ],
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.j-ticket-unlinked":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          tickets: (thread.tickets ?? []).filter((ticket) => ticket.url !== event.payload.url),
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
     case "thread.runtime-mode-set":
       return {
         kind: "updated",

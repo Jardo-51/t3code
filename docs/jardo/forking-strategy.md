@@ -354,3 +354,9 @@ Reverting a database to plain upstream stays safe as long as fork migrations onl
 indexes on them, and nullable or defaulted `j_` columns. Upstream never reads `j_*` objects, but a
 constraint, trigger, or unique index a fork migration puts on an upstream table can make upstream's
 own writes or migrations fail.
+
+The same reasoning covers anything else that outlives one process or crosses to another version:
+fork-only orchestration command and event types (`thread.j-ticket.link`, `thread.j-ticket-linked`),
+environment capabilities (`jThreadTickets`) and persisted client settings (`jSidebarShowTickets`)
+carry a `j` marker. Stored events are replayed forever, so an upstream event that later took the
+same name with a different payload would make the fork's history undecodable.

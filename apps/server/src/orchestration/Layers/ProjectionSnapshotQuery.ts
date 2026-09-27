@@ -61,6 +61,7 @@ import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionT
 import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadPullRequest } from "../../persistence/ProjectionThreadPullRequests.ts";
+import { withThreadTickets } from "./JardoThreadTicketsSnapshotQuery.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
 import {
@@ -3867,5 +3868,5 @@ pending_approval_requests AS (
 
 export const OrchestrationProjectionSnapshotQueryLive = Layer.effect(
   ProjectionSnapshotQuery,
-  makeProjectionSnapshotQuery,
+  makeProjectionSnapshotQuery.pipe(Effect.flatMap(withThreadTickets)),
 );

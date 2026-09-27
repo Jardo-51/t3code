@@ -203,6 +203,10 @@
       "types": "./src/threadPullRequests.ts",
       "import": "./src/threadPullRequests.ts"
     },
+    "./threadTickets": {
+      "types": "./src/threadTickets.ts",
+      "import": "./src/threadTickets.ts"
+    },
     "./changeRequestUrl": {
       "types": "./src/changeRequestUrl.ts",
       "import": "./src/changeRequestUrl.ts"
