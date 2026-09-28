@@ -317,6 +317,20 @@ touched adopted code: build, run the tests, and grep for identifiers the PR intr
   Every branch now starts from the same base, so nothing forces this on you; untangling a mixed
   branch at promotion time is far more expensive than keeping it clean while writing it.
 
+## Separate T3 home
+
+The fork's default T3 home is `~/.t3-jardo` instead of upstream's `~/.t3`, so an upstream install and
+the fork keep separate databases, auth, and settings. `T3CODE_HOME` and `--base-dir` still override
+it. Only the defaults of the server and the desktop app change; paths upstream derives from `~/.t3`
+elsewhere (remote SSH/WSL scripts, dev tooling) are left alone. The Electron profile directory is
+still shared, so the two desktop apps cannot run at the same time.
+
+To keep existing data, stop T3 Code and move (do not copy) `~/.t3/userdata` to
+`~/.t3-jardo/userdata`. A copy would give both servers the same `environment-id`, and the old
+database may already hold fork-only events that upstream cannot read (see
+[Custom database migrations](#custom-database-migrations)). Leave `~/.t3/worktrees` where it is:
+existing threads reference it by absolute path, so do not delete `~/.t3` while they are in use.
+
 ## Custom database migrations
 
 Fork-only schema changes do not go into upstream's list in

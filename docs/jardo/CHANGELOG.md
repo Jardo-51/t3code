@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [#9](https://github.com/Jardo-51/t3code/issues/9) Custom DB migration track for this fork to avoid conflicts with upstream. See [docs](forking-strategy.md#custom-database-migrations).
 - [#11](https://github.com/Jardo-51/t3code/issues/11) Link issue-tracker tickets (Jira, GitHub, etc.) to threads. Partly resolves [#11785](https://github.com/pingdotgg/t3code/discussions/11785). See [docs](ticket-links.md). Likely conflicts with [orchestrator V2](https://github.com/pingdotgg/t3code/pull/2829).
 
+### Changed
+
+- Default T3 home is `~/.t3-jardo` instead of `~/.t3`, so the fork and upstream keep separate data. See [docs](forking-strategy.md#separate-t3-home) for how to keep existing data.
+
 ### Fixed
 
 - [#13625](https://github.com/pingdotgg/t3code/issues/13625) False completion sound/notification when subagents or monitors finish after the agent's turn has ended and it resumes working (promoted to upstream PR [#14073](https://github.com/pingdotgg/t3code/pull/14073)).
