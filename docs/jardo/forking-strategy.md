@@ -320,10 +320,12 @@ touched adopted code: build, run the tests, and grep for identifiers the PR intr
 ## Separate T3 home
 
 The fork's default T3 home is `~/.t3-jardo` instead of upstream's `~/.t3`. This lets an upstream
-install and a fork build run side by side without sharing a database, auth, settings, or logs. It
-also means an upstream server never replays the fork's `thread.j-*` events (see
-[Custom database migrations](#custom-database-migrations)). `T3CODE_HOME` and `--base-dir` still
-override it. Worktree dev state (`<worktree>/.t3`) is per-checkout already and keeps its name.
+install and a fork build run side by side without sharing a database, auth, settings, or logs, and
+keeps the fork's `thread.j-*` events (see [Custom database migrations](#custom-database-migrations))
+out of a home upstream uses. That holds only going forward: earlier fork builds wrote to `~/.t3`, so
+that home needs the migration below before upstream can use it. `T3CODE_HOME` and `--base-dir` still
+override the default. Worktree dev state (`<worktree>/.t3`) is per-checkout already and keeps its
+name.
 
 The rename also covers the directories the fork creates on other machines: the SSH launch state and
 server home, the WSL runtime cache, and the device-hub state. Otherwise a fork client and an upstream
@@ -331,8 +333,8 @@ client connected to the same host would adopt or stop each other's remote server
 other's caches. `scripts/install.sh` and `install.ps1` keep `~/.t3`, since they install upstream's
 releases.
 
-Earlier fork builds used `~/.t3`. To keep that data, stop T3 Code and move
-`~/.t3/userdata` to `~/.t3-jardo/userdata`. Move rather than copy: the old database holds fork events
+To keep the data of an earlier fork build, stop T3 Code and move `~/.t3/userdata` to
+`~/.t3-jardo/userdata`. Move rather than copy: the old database holds fork events
 that a plain upstream server fails on, and a copy would carry the server's `environment-id` along,
 so clients would treat the two servers as one environment. To leave upstream a copy anyway, copy the
 directory while T3 Code is stopped (a live `state.sqlite` copies corrupt), delete `environment-id`
