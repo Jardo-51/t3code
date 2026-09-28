@@ -331,6 +331,14 @@ client connected to the same host would adopt or stop each other's remote server
 other's caches. `scripts/install.sh` and `install.ps1` keep `~/.t3`, since they install upstream's
 releases.
 
+Earlier fork builds used `~/.t3`. To keep that data, stop T3 Code and move
+`~/.t3/userdata` to `~/.t3-jardo/userdata`. Move rather than copy: the old database holds fork events
+that a plain upstream server fails on, and a copy would carry the server's `environment-id` along,
+so clients would treat the two servers as one environment. To leave upstream a copy anyway, copy the
+directory while T3 Code is stopped (a live `state.sqlite` copies corrupt), delete `environment-id`
+from the copy so its server generates a new one, and strip the fork's events from it with the
+[revert procedure](#custom-database-migrations).
+
 Upstream's docs and `AGENTS.md` say `~/.t3`. In this fork, read that as `~/.t3-jardo`: the dev
 database scripts' guard against touching live data points there too. The Electron profile directory
 (`t3code` under the OS app-data directory) is not renamed and is still shared with an upstream
