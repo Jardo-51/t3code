@@ -317,6 +317,32 @@ touched adopted code: build, run the tests, and grep for identifiers the PR intr
   Every branch now starts from the same base, so nothing forces this on you; untangling a mixed
   branch at promotion time is far more expensive than keeping it clean while writing it.
 
+## Separate T3 home
+
+The fork's default T3 home is `~/.t3-jardo` instead of upstream's `~/.t3`. This lets an upstream
+install and a fork build run side by side without sharing a database, auth, settings, or logs. It
+also means an upstream server never replays the fork's `thread.j-*` events (see
+[Custom database migrations](#custom-database-migrations)). `T3CODE_HOME` and `--base-dir` still
+override it. Worktree dev state (`<worktree>/.t3`) is per-checkout already and keeps its name.
+
+The rename also covers the directories the fork creates on other machines: the SSH launch state and
+server home, the WSL runtime cache, and the device-hub state. Otherwise a fork client and an upstream
+client connected to the same host would adopt or stop each other's remote server and prune each
+other's caches. `scripts/install.sh` and `install.ps1` keep `~/.t3`, since they install upstream's
+releases.
+
+Upstream's docs and `AGENTS.md` say `~/.t3`. In this fork, read that as `~/.t3-jardo`: the dev
+database scripts' guard against touching live data points there too. The Electron profile directory
+(`t3code` under the OS app-data directory) is not renamed and is still shared with an upstream
+desktop app.
+
+Upstream keeps adding code that writes under `~/.t3`. Before each sync, check what `main` is about to
+bring in and move any new home-relative paths to `~/.t3-jardo`:
+
+```bash
+git diff custom/main...main | grep -E '^\+.*\.t3\b' | grep -v 't3\.codes'
+```
+
 ## Custom database migrations
 
 Fork-only schema changes do not go into upstream's list in
