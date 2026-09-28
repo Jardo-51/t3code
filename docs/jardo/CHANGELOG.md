@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Default T3 home is `~/.t3-jardo` instead of `~/.t3`, so the fork and upstream keep separate data. To keep existing data, stop T3 Code and move `~/.t3/userdata` to `~/.t3-jardo/userdata`. See [docs](forking-strategy.md#separate-t3-home).
+- Default T3 home is `~/.t3-jardo` instead of `~/.t3`, so the fork and upstream keep separate data. See [docs](forking-strategy.md#separate-t3-home) for how to keep existing data.
 
 ### Fixed
 

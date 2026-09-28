@@ -327,8 +327,9 @@ still shared, so the two desktop apps cannot run at the same time.
 
 To keep existing data, stop T3 Code and move (do not copy) `~/.t3/userdata` to
 `~/.t3-jardo/userdata`. A copy would give both servers the same `environment-id`, and the old
-database already holds fork-only events that upstream cannot read (see
-[Custom database migrations](#custom-database-migrations)).
+database may already hold fork-only events that upstream cannot read (see
+[Custom database migrations](#custom-database-migrations)). Leave `~/.t3/worktrees` where it is:
+existing threads reference it by absolute path, so do not delete `~/.t3` while they are in use.
 
 ## Custom database migrations
 
