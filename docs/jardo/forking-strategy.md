@@ -345,12 +345,17 @@ Upstream's docs and `AGENTS.md` say `~/.t3`. In this fork, read that as `~/.t3-j
 where the dev database scripts take their source data from. Those scripts refuse to write to either
 home, since an upstream install may still run against `~/.t3`.
 
-Still shared with an upstream install:
+Not yet separated from an upstream install:
 
 - The desktop app's Electron profile (`t3code` under the OS app-data directory). Both desktop apps
   load the same origin from it, so they share the web client's stored state (saved environments, UI
   preferences, drafts) and cookies. Don't run the two desktop apps at the same time; side by side
   holds for servers and dev runs only.
+- The boot service (`t3 service install`): both builds write the same systemd user unit and
+  launchd label, so installing one replaces the other's service and its `T3CODE_HOME`.
+- Upstream's session scanner recognizes only its own worktrees and the literal `.t3/worktrees`
+  layout, so it treats the fork's `~/.t3-jardo/worktrees` sandboxes as user sessions. The fork's
+  scanner still skips upstream's.
 
 Upstream keeps adding code that writes under `~/.t3`. Before each sync, check what `main` is about to
 bring in and move any new home-relative paths to `~/.t3-jardo`:
