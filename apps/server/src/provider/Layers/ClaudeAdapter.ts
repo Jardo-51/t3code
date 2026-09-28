@@ -454,10 +454,11 @@ interface ClaudeSessionContext {
   /** Task ids that have started and not yet reached a terminal state. */
   readonly liveTaskIds: Set<string>;
   /**
-   * True while the session is held running for the wake-up turn the CLI
+   * Set while the session is held running for the wake-up turn the CLI
    * starts after background work settles; see `holdForBackgroundWake`.
+   * "pending" until that turn opens (system/init), then "open".
    */
-  backgroundWakeHeld: boolean;
+  backgroundWake: "pending" | "open" | undefined;
   /** Releases the hold if the CLI never opens the wake-up turn (system/init). */
   backgroundWakeFallback: Fiber.Fiber<void> | undefined;
   turnState: ClaudeTurnState | undefined;
@@ -2675,9 +2676,13 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     errorMessage?: string,
     result?: SDKResultMessage,
   ) {
-    // Any result ends a background-wake hold, including a wake-up turn that
-    // never produced a parent assistant message (and so has no local turn).
-    yield* releaseBackgroundWake(context, "background_wake_ended");
+    // The wake-up turn's result ends a background-wake hold, including one
+    // that never produced a parent assistant message (and so has no local
+    // turn). A result before that turn opened is a late one for an earlier
+    // turn and must not end the hold.
+    if (context.backgroundWake === "open") {
+      yield* releaseBackgroundWake(context, "background_wake_ended");
+    }
 
     const resultContextWindow = maxClaudeContextWindowFromModelUsage(result?.modelUsage);
     if (resultContextWindow !== undefined) {
@@ -3609,8 +3614,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
    * the model and starts a wake-up turn for it. Until that turn opens
    * (system/init), the thread would otherwise read as ready with the previous
    * turn completed, which clients report as a finished run. Marking the
-   * session running first carries it through the handoff. The next turn to
-   * complete ends the hold; the fallback releases it if the CLI never wakes.
+   * session running first carries it through the handoff. The wake-up turn's
+   * result ends the hold; the fallback releases it if the CLI never wakes.
    */
   const holdForBackgroundWake = Effect.fn("holdForBackgroundWake")(function* (
     context: ClaudeSessionContext,
@@ -3620,7 +3625,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     if (
       context.stopped ||
       context.turnState ||
-      context.backgroundWakeHeld ||
+      context.backgroundWake !== undefined ||
       !context.liveTaskIds.has(taskId) ||
       // Results of work launched inside a subagent go to that subagent, and
       // skip-transcript tasks are never shown to the model: neither wakes it.
@@ -3629,7 +3634,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     ) {
       return;
     }
-    context.backgroundWakeHeld = true;
+    context.backgroundWake = "pending";
     yield* emitSessionState(context, "running", "background_task_settled");
     context.backgroundWakeFallback = yield* Effect.sleep(BACKGROUND_WAKE_FALLBACK).pipe(
       Effect.andThen(
@@ -3661,10 +3666,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     context: ClaudeSessionContext,
     reason: string,
   ) {
-    if (!context.backgroundWakeHeld) {
+    if (context.backgroundWake === undefined) {
       return;
     }
-    context.backgroundWakeHeld = false;
+    context.backgroundWake = undefined;
     yield* cancelBackgroundWakeFallback(context);
     if (!context.stopped && !context.turnState) {
       yield* emitSessionState(context, "ready", reason);
@@ -3713,6 +3718,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         // The CLI opens every turn with init, including the wake-up turn a
         // held session is waiting for. The hold now lasts until that turn's
         // result, which can take longer than the fallback.
+        if (context.backgroundWake === "pending") {
+          context.backgroundWake = "open";
+        }
         yield* cancelBackgroundWakeFallback(context);
         yield* offerRuntimeEvent({
           ...base,
@@ -5149,7 +5157,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         pendingTaskModels,
         workflowMemberFingerprints,
         liveTaskIds,
-        backgroundWakeHeld: false,
+        backgroundWake: undefined,
         backgroundWakeFallback: undefined,
         turnState: undefined,
         lastKnownContextWindow: initialContextWindow,

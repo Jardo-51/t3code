@@ -3471,6 +3471,38 @@ describe("ClaudeAdapterLive", () => {
       );
     });
 
+    it.effect("keeps the hold through a late result before the wake-up turn opens", () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const observed = yield* observeEvents(adapter);
+        yield* settleBackgroundTaskAfterTurn(harness, observed);
+
+        const configured = yield* observed.waitFor((event) => event.type === "session.configured");
+        harness.query.emit(turnResult("result-late"));
+        harness.query.emit({
+          type: "system",
+          subtype: "init",
+          session_id: "sdk-session",
+          uuid: "init-wake",
+        } as unknown as SDKMessage);
+        yield* Deferred.await(configured);
+
+        assert.isFalse(
+          observed.events.some((event) => reasonOf(event) === "ready:background_wake_ended"),
+        );
+
+        const released = yield* observed.waitFor(
+          (event) => reasonOf(event) === "ready:background_wake_ended",
+        );
+        harness.query.emit(turnResult("result-wake"));
+        yield* Deferred.await(released);
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    });
+
     it.effect.each([
       {
         name: "a task settling while the turn is still running",
