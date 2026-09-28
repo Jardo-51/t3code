@@ -342,9 +342,14 @@ from the copy so its server generates a new one, and strip the fork's events fro
 [revert procedure](#custom-database-migrations).
 
 Upstream's docs and `AGENTS.md` say `~/.t3`. In this fork, read that as `~/.t3-jardo`: the dev
-database scripts' guard against touching live data points there too. The Electron profile directory
-(`t3code` under the OS app-data directory) is not renamed and is still shared with an upstream
-desktop app.
+database scripts' guard against touching live data points there too.
+
+Still shared with an upstream install:
+
+- The desktop app's Electron profile (`t3code` under the OS app-data directory). Both desktop apps
+  load the same origin from it, so they share the web client's stored state (saved environments, UI
+  preferences, drafts) and cookies. Don't run the two desktop apps at the same time; side by side
+  holds for servers and dev runs only.
 
 Upstream keeps adding code that writes under `~/.t3`. Before each sync, check what `main` is about to
 bring in and move any new home-relative paths to `~/.t3-jardo`:
