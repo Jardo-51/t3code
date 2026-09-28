@@ -387,6 +387,14 @@ interface ClaudeTaskAgentState {
 const PENDING_TASK_MODEL_CAP = 64;
 
 /**
+ * How long a session stays held running after idle background work settles
+ * without the CLI starting a wake-up turn. The CLI normally opens that turn
+ * (system/init) within milliseconds; this only bounds notifications it keeps
+ * to itself, so the thread cannot be left reading as working.
+ */
+const BACKGROUND_WAKE_FALLBACK = "10 seconds";
+
+/**
  * Buffers a subagent snapshot's authoritative model under its
  * parent_tool_use_id, for snapshots that beat their task_started to the
  * stream. task_started consumes the entry when it registers the task.
@@ -445,6 +453,13 @@ interface ClaudeSessionContext {
   readonly workflowMemberFingerprints: Map<string, string>;
   /** Task ids that have started and not yet reached a terminal state. */
   readonly liveTaskIds: Set<string>;
+  /**
+   * True while the session is held running for the wake-up turn the CLI
+   * starts after background work settles; see `holdForBackgroundWake`.
+   */
+  backgroundWakeHeld: boolean;
+  /** Releases the hold if the CLI never opens the wake-up turn (system/init). */
+  backgroundWakeFallback: Fiber.Fiber<void> | undefined;
   turnState: ClaudeTurnState | undefined;
   lastKnownContextWindow: number | undefined;
   lastKnownTokenUsage: ThreadTokenUsageSnapshot | undefined;
@@ -2660,6 +2675,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     errorMessage?: string,
     result?: SDKResultMessage,
   ) {
+    // Any result ends a background-wake hold, including a wake-up turn that
+    // never produced a parent assistant message (and so has no local turn).
+    yield* releaseBackgroundWake(context, "background_wake_ended");
+
     const resultContextWindow = maxClaudeContextWindowFromModelUsage(result?.modelUsage);
     if (resultContextWindow !== undefined) {
       context.lastKnownContextWindow = resultContextWindow;
@@ -3567,6 +3586,91 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }
   });
 
+  const emitSessionState = Effect.fn("emitSessionState")(function* (
+    context: ClaudeSessionContext,
+    state: "running" | "ready",
+    reason: string,
+  ) {
+    const stamp = yield* makeEventStamp();
+    yield* offerRuntimeEvent({
+      type: "session.state.changed",
+      eventId: stamp.eventId,
+      provider: PROVIDER,
+      createdAt: stamp.createdAt,
+      threadId: context.session.threadId,
+      payload: { state, reason },
+      providerRefs: nativeProviderRefs(context),
+    });
+  });
+
+  /**
+   * Call before emitting the event that ends a background task. When the
+   * parent turn is already over, the CLI delivers the task's result back to
+   * the model and starts a wake-up turn for it. Until that turn opens
+   * (system/init), the thread would otherwise read as ready with the previous
+   * turn completed, which clients report as a finished run. Marking the
+   * session running first carries it through the handoff. The next turn to
+   * complete ends the hold; the fallback releases it if the CLI never wakes.
+   */
+  const holdForBackgroundWake = Effect.fn("holdForBackgroundWake")(function* (
+    context: ClaudeSessionContext,
+    taskId: string,
+  ) {
+    const agent = context.taskAgents.get(taskId);
+    if (
+      context.stopped ||
+      context.turnState ||
+      context.backgroundWakeHeld ||
+      !context.liveTaskIds.has(taskId) ||
+      // Results of work launched inside a subagent go to that subagent, and
+      // skip-transcript tasks are never shown to the model: neither wakes it.
+      agent?.owningAgentId !== undefined ||
+      agent?.skipTranscript === true
+    ) {
+      return;
+    }
+    context.backgroundWakeHeld = true;
+    yield* emitSessionState(context, "running", "background_task_settled");
+    context.backgroundWakeFallback = yield* Effect.sleep(BACKGROUND_WAKE_FALLBACK).pipe(
+      Effect.andThen(
+        Effect.suspend(() => {
+          context.backgroundWakeFallback = undefined;
+          return releaseBackgroundWake(context, "background_wake_timeout");
+        }),
+      ),
+      Effect.ignoreCause({ log: true }),
+      Effect.forkDetach,
+    );
+  });
+
+  const cancelBackgroundWakeFallback = Effect.fn("cancelBackgroundWakeFallback")(function* (
+    context: ClaudeSessionContext,
+  ) {
+    const fallback = context.backgroundWakeFallback;
+    context.backgroundWakeFallback = undefined;
+    if (fallback) {
+      yield* Fiber.interrupt(fallback);
+    }
+  });
+
+  /**
+   * Ends a hold. A turn in flight settles the session itself; otherwise the
+   * session goes back to ready here.
+   */
+  const releaseBackgroundWake = Effect.fn("releaseBackgroundWake")(function* (
+    context: ClaudeSessionContext,
+    reason: string,
+  ) {
+    if (!context.backgroundWakeHeld) {
+      return;
+    }
+    context.backgroundWakeHeld = false;
+    yield* cancelBackgroundWakeFallback(context);
+    if (!context.stopped && !context.turnState) {
+      yield* emitSessionState(context, "ready", reason);
+    }
+  });
+
   const handleSystemMessage = Effect.fn("handleSystemMessage")(function* (
     context: ClaudeSessionContext,
     message: SDKMessage,
@@ -3606,6 +3710,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     switch (message.subtype) {
       case "init":
+        // The CLI opens every turn with init, including the wake-up turn a
+        // held session is waiting for. The hold now lasts until that turn's
+        // result, which can take longer than the fallback.
+        yield* cancelBackgroundWakeFallback(context);
         yield* offerRuntimeEvent({
           ...base,
           type: "session.configured",
@@ -3810,6 +3918,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         const status =
           patch.status !== undefined ? CLAUDE_TASK_PATCH_STATUS[patch.status] : undefined;
         if (status === "completed" || status === "failed" || status === "cancelled") {
+          yield* holdForBackgroundWake(context, message.task_id);
           context.liveTaskIds.delete(message.task_id);
         }
         const endedAt =
@@ -3834,6 +3943,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         return;
       }
       case "task_notification": {
+        yield* holdForBackgroundWake(context, message.task_id);
         context.liveTaskIds.delete(message.task_id);
         yield* emitThreadTokenUsage(
           context,
@@ -4320,6 +4430,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     }
 
     yield* Queue.shutdown(context.promptQueue);
+    yield* cancelBackgroundWakeFallback(context);
 
     const streamFiber = context.streamFiber;
     context.streamFiber = undefined;
@@ -5038,6 +5149,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         pendingTaskModels,
         workflowMemberFingerprints,
         liveTaskIds,
+        backgroundWakeHeld: false,
+        backgroundWakeFallback: undefined,
         turnState: undefined,
         lastKnownContextWindow: initialContextWindow,
         lastKnownTokenUsage: undefined,

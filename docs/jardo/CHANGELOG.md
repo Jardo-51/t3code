@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- [#13625](https://github.com/pingdotgg/t3code/issues/13625) False completion sound/notification when subagents or monitors finish after the agent's turn has ended and it resumes working.
 - Misaligned PR link in sidebar (promoted to upstream PR [#14007](https://github.com/pingdotgg/t3code/pull/14007)).
 
 ## [0.0.41-nightly.20260908.1377-jardo.1] - 2026-09-11
