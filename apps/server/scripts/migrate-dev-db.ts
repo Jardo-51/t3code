@@ -54,7 +54,7 @@ export class MigrateDevDbSharedHomeError extends Schema.TaggedError<MigrateDevDb
   {},
 ) {
   override get message(): string {
-    return "Refusing to rebuild the shared ~/.t3-jardo database. Use an isolated --base-dir.";
+    return "Refusing to rebuild a shared ~/.t3 or ~/.t3-jardo database. Use an isolated --base-dir.";
   }
 }
 
@@ -152,6 +152,8 @@ export interface RunMigrateDevDbInput {
 export interface RunMigrateDevDbOptions {
   /** Overridable for tests; the directory writes must never target. */
   readonly sharedHome?: string | undefined;
+  /** Overridable for tests; upstream's home, which an upstream install may still run against. */
+  readonly upstreamHome?: string | undefined;
 }
 
 interface KeptProject {
@@ -361,6 +363,7 @@ export const runMigrateDevDb = Effect.fn("runMigrateDevDb")(function* (
   const path = yield* Path.Path;
 
   const sharedHome = path.resolve(options.sharedHome ?? path.join(NodeOS.homedir(), ".t3-jardo"));
+  const upstreamHome = path.resolve(options.upstreamHome ?? path.join(NodeOS.homedir(), ".t3"));
   const sourcePath = path.resolve(
     input.source ?? path.join(sharedHome, "userdata", "state.sqlite"),
   );
@@ -379,11 +382,13 @@ export const runMigrateDevDb = Effect.fn("runMigrateDevDb")(function* (
   if (!(yield* fs.exists(sourcePath))) {
     return yield* new MigrateDevDbSourceMissingError({ sourcePath });
   }
-  const [canonicalBaseDir, canonicalSharedHome] = yield* Effect.all([
+  const [canonicalBaseDir, canonicalSharedHomes] = yield* Effect.all([
     fs.realPath(baseDir).pipe(Effect.orElseSucceed(() => baseDir)),
-    fs.realPath(sharedHome).pipe(Effect.orElseSucceed(() => sharedHome)),
+    Effect.forEach([sharedHome, upstreamHome], (home) =>
+      fs.realPath(home).pipe(Effect.orElseSucceed(() => home)),
+    ),
   ]);
-  if (canonicalBaseDir === canonicalSharedHome) {
+  if (canonicalSharedHomes.includes(canonicalBaseDir)) {
     return yield* new MigrateDevDbSharedHomeError();
   }
   // The destination db and snapshot both get deleted below; a --source that

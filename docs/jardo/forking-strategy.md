@@ -341,8 +341,9 @@ directory while T3 Code is stopped (a live `state.sqlite` copies corrupt), delet
 from the copy so its server generates a new one, and strip the fork's events from it with the
 [revert procedure](#custom-database-migrations).
 
-Upstream's docs and `AGENTS.md` say `~/.t3`. In this fork, read that as `~/.t3-jardo`: the dev
-database scripts' guard against touching live data points there too.
+Upstream's docs and `AGENTS.md` say `~/.t3`. In this fork, read that as `~/.t3-jardo`, which is also
+where the dev database scripts take their source data from. Those scripts refuse to write to either
+home, since an upstream install may still run against `~/.t3`.
 
 Still shared with an upstream install:
 

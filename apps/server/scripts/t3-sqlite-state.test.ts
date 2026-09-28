@@ -121,4 +121,19 @@ it.layer(NodeServices.layer)("t3-sqlite-state", (it) => {
         assert.equal(aliasError._tag, "SqliteStateSharedHomeMutationError");
       }),
   );
+
+  it.effect("refuses to mutate upstream's home", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-sqlite-state-upstream-" });
+      const sharedHome = yield* fs.makeTempDirectoryScoped({ prefix: "t3-sqlite-state-shared-" });
+      yield* createFixtureDatabase(baseDir);
+
+      const error = yield* runSqliteState(
+        { operation: "exec", baseDir, sql: "DELETE FROM fixtures" },
+        { sharedHome, upstreamHome: baseDir },
+      ).pipe(Effect.flip);
+      assert.equal(error._tag, "SqliteStateSharedHomeMutationError");
+    }),
+  );
 });

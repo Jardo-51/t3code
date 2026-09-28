@@ -192,4 +192,19 @@ it.layer(NodeServices.layer)("migrate-dev-db", (it) => {
       assert.equal(error._tag, "MigrateDevDbSharedHomeError");
     }),
   );
+
+  it.effect("refuses to rebuild upstream's home", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const sourceDir = yield* fs.makeTempDirectoryScoped({ prefix: "migrate-dev-db-source-" });
+      const upstreamDir = yield* fs.makeTempDirectoryScoped({ prefix: "migrate-dev-db-upstream-" });
+      const source = yield* createFixtureSource(sourceDir);
+
+      const error = yield* runMigrateDevDb(
+        { baseDir: upstreamDir, source, projects: 5, threadsPerProject: 10 },
+        { sharedHome: sourceDir, upstreamHome: upstreamDir },
+      ).pipe(Effect.flip);
+      assert.equal(error._tag, "MigrateDevDbSharedHomeError");
+    }),
+  );
 });
