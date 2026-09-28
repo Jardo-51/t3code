@@ -8,11 +8,11 @@
 ## Issues
 
 - [[Bug]: New threads in the same project do not preserve the last-used model and working-mode settings](https://github.com/pingdotgg/t3code/issues/6508)
-- [[Bug]: Completion sound fires when subagents or monitors finish, even though the agent resumes working](https://github.com/pingdotgg/t3code/issues/13625)
+- [[Bug]: Completion sound fires when subagents or monitors finish, even though the agent resumes working](https://github.com/pingdotgg/t3code/issues/13625) (fixed in this fork)
 
 ## Discussions
 
-- [[Feature]: Link threads to issues and auto-settle when the issue closes](https://github.com/pingdotgg/t3code/discussions/11785)
+- [[Feature]: Link threads to issues and auto-settle when the issue closes](https://github.com/pingdotgg/t3code/discussions/11785) (added in this fork)
 - [Show separate charts and cost values for multiple configured Claude providers (do not combine them)](https://github.com/pingdotgg/t3code/discussions/11561)
 - [[Feature]: Scheduled Prompts](https://github.com/pingdotgg/t3code/discussions/6748)
 - [[Feature]: visual interface for subagents](https://github.com/pingdotgg/t3code/discussions/6858)
