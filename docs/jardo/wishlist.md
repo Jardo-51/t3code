@@ -9,6 +9,7 @@
 
 - [[Bug]: New threads in the same project do not preserve the last-used model and working-mode settings](https://github.com/pingdotgg/t3code/issues/6508)
 - [[Bug]: Completion sound fires when subagents or monitors finish, even though the agent resumes working](https://github.com/pingdotgg/t3code/issues/13625) (fixed in this fork)
+- [[Bug]: renaming a provider kills in-flight work in every thread using it](https://github.com/pingdotgg/t3code/issues/11043#issuecomment-5933411630) - requested to extend the scope to env. variables
 
 ## Discussions
 
