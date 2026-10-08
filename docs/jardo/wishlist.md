@@ -15,6 +15,7 @@
 
 - [[Feature]: Link threads to issues and auto-settle when the issue closes](https://github.com/pingdotgg/t3code/discussions/11785) (added in this fork)
 - [Show separate charts and cost values for multiple configured Claude providers (do not combine them)](https://github.com/pingdotgg/t3code/discussions/11561)
+- [Show token usage and estimated cost per thread](https://github.com/pingdotgg/t3code/discussions/13073)
 - [[Feature]: Scheduled Prompts](https://github.com/pingdotgg/t3code/discussions/6748)
 - [[Feature]: visual interface for subagents](https://github.com/pingdotgg/t3code/discussions/6858)
 - [Mobile: long-press a link in a thread to copy its URL](https://github.com/pingdotgg/t3code/discussions/8205)
