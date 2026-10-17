@@ -3,12 +3,22 @@ import {
   CommandId,
   type OrchestrationV2AppThread,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
+import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import { applyJThreadTicketCommand, type JThreadTicketCommand } from "./JThreadTickets.ts";
+import * as Orchestrator from "./Orchestrator.ts";
+import * as ProjectionStore from "./ProjectionStore.ts";
+import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
+import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
 
 const threadId = ThreadId.make("thread:tickets");
 const createdAt = DateTime.makeUnsafe("2026-10-01T00:00:00.000Z");
@@ -111,4 +121,75 @@ describe("applyJThreadTicketCommand", () => {
     );
     assert.deepStrictEqual(unlinked.jTickets, []);
   });
+});
+
+// Pins the upstream hook lines (orchestrator dispatch and both shell builders) a sync could drop.
+describe("ticket commands through the orchestrator", () => {
+  const instanceId = ProviderInstanceId.make("codex");
+  const adapter = {
+    instanceId,
+    driver: ProviderDriverKind.make("codex"),
+    getCapabilities: () => Effect.succeed(CodexProviderCapabilitiesV2),
+    planSelectionTransition: () => Effect.succeed({ type: "apply_on_next_turn" as const }),
+    openSession: () => Effect.die("Ticket commands never start a provider"),
+  } as ProviderAdapter.ProviderAdapterV2["Service"];
+  const layerDatabase = SqlitePersistence.layerMemory;
+  const layerTest = Layer.mergeAll(
+    layerDatabase,
+    ProjectionStore.layer.pipe(Layer.provide(layerDatabase)),
+    ProviderReplayHarness.layerWithRegistry(
+      { name: "j-thread-tickets" },
+      ProviderAdapterRegistry.layerFromAdapters([adapter]),
+      { databaseLayer: layerDatabase, runEffectWorker: false },
+    ),
+  );
+
+  it.effect("links and unlinks a ticket on the thread payload and shells", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("create"),
+        threadId,
+        projectId: ProjectId.make("project:tickets"),
+        title: "Tickets",
+        modelSelection: { instanceId, model: "gpt-5.4" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const shellTickets = Effect.gen(function* () {
+        const persisted = yield* projections.getThreadShell(threadId);
+        const replayed = ProjectionStore.threadShellFromProjection(
+          yield* projections.getThreadProjection(threadId),
+        );
+        assert.deepStrictEqual(persisted?.jTickets, replayed.jTickets);
+        return replayed.jTickets ?? [];
+      });
+
+      const linked = yield* orchestrator.dispatch(link("PROJ-1", "agent"));
+      assert.deepStrictEqual(
+        linked.storedEvents.map(({ event }) =>
+          event.type === "thread.metadata-updated" ? event.payload.jTickets?.map((t) => t.key) : [],
+        ),
+        [["PROJ-1"]],
+      );
+      assert.deepStrictEqual(
+        (yield* shellTickets).map((ticket) => ticket.url),
+        [url],
+      );
+
+      yield* orchestrator.dispatch({
+        type: "thread.j-ticket.unlink",
+        commandId: CommandId.make("unlink"),
+        threadId,
+        url,
+      });
+      assert.deepStrictEqual(yield* shellTickets, []);
+    }).pipe(Effect.provide(layerTest)),
+  );
 });
