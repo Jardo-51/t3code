@@ -363,6 +363,10 @@ database. Write them to survive that:
 - Guard schema changes, e.g. check `PRAGMA table_info` before `ALTER TABLE ... ADD COLUMN`.
 - Keep reads of upstream tables minimal, and expect to adjust them when upstream changes those
   tables.
+- Never remove or renumber a migration once it is in `custom/main`, even when reverting the feature
+  that added it. Other installs have already applied it, and a re-implementation that reuses its ID
+  would be silently skipped there. Leave the migration and its table in place, and change the schema
+  later with a new migration.
 
 A database can be reverted to plain upstream as long as fork migrations only add `j_` tables,
 indexes on them, and nullable or defaulted `j_` columns. Upstream never reads `j_*` objects, but a
