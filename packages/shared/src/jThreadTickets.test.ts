@@ -38,5 +38,7 @@ describe("parseTicketUrl", () => {
     );
     expect(parseTicketUrl("PROJ-123")).toBeNull();
     expect(parseTicketUrl("javascript:alert(1)")).toBeNull();
+    expect(parseTicketUrl("file:///etc/passwd")).toBeNull();
+    expect(parseTicketUrl(`https://example.com/${"a".repeat(2048)}`)).toBeNull();
   });
 });

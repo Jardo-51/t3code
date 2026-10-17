@@ -18,12 +18,33 @@ export const JThreadTicket = Schema.Struct({
 });
 export type JThreadTicket = typeof JThreadTicket.Type;
 
+// `TrimmedString` checks the untrimmed value on `make` and encode, so trim before parsing.
+const isWebUrl = Schema.makeFilter(
+  (value: string) => {
+    try {
+      const { protocol } = new URL(value.trim());
+      return protocol === "https:" || protocol === "http:";
+    } catch {
+      return false;
+    }
+  },
+  { expected: "an http(s) URL" },
+);
+
+/**
+ * Every client renders a ticket URL as a link and opens it, so new links must be web addresses.
+ * Stored tickets (`JThreadTicket`) keep the plain strings: tightening those would make threads
+ * holding an older link undecodable. Both ride on every later event of the thread, hence the caps.
+ */
+export const JThreadTicketUrl = TrimmedNonEmptyString.check(Schema.isMaxLength(2048), isWebUrl);
+export const JThreadTicketKey = TrimmedNonEmptyString.check(Schema.isMaxLength(256));
+
 export const JThreadTicketLinkCommand = Schema.Struct({
   type: Schema.Literal("thread.j-ticket.link"),
   commandId: CommandId,
   threadId: ThreadId,
-  url: TrimmedNonEmptyString,
-  key: TrimmedNonEmptyString,
+  url: JThreadTicketUrl,
+  key: JThreadTicketKey,
   source: JThreadTicketSource,
 });
 

@@ -1,14 +1,12 @@
-import type { JThreadTicket } from "@t3tools/contracts";
+import { type JThreadTicket, JThreadTicketUrl } from "@t3tools/contracts";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
-/** The trimmed input when it is an http(s) URL; ticket links never contact the tracker. */
+const decodeTicketUrl = Schema.decodeUnknownOption(JThreadTicketUrl);
+
+/** The trimmed input when the server accepts it as a ticket URL; links never contact the tracker. */
 export function parseTicketUrl(input: string): string | null {
-  const trimmed = input.trim();
-  try {
-    const url = new URL(trimmed);
-    return url.protocol === "https:" || url.protocol === "http:" ? trimmed : null;
-  } catch {
-    return null;
-  }
+  return Option.getOrNull(decodeTicketUrl(input));
 }
 
 const AZURE_WORK_ITEM = /\/_workitems\/edit\/(\d+)(?:\/|$)/u;

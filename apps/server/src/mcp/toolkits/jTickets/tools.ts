@@ -1,4 +1,5 @@
 import {
+  JThreadTicketKey,
   McpCapabilityUnavailableError,
   OrchestratorMcpFailure,
   ThreadId,
@@ -94,7 +95,7 @@ const LinkTicketTool = Tool.make("link_ticket", {
     threadId: threadIdInput,
     url: urlInput,
     key: Schema.optional(
-      TrimmedNonEmptyString.annotate({
+      JThreadTicketKey.annotate({
         description: "The ID the tracker shows for the ticket, such as PROJ-123.",
       }),
     ),
