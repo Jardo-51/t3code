@@ -251,6 +251,7 @@ import {
 import { threadPullRequestPanelTarget } from "./pullRequest/pullRequestDetail.logic";
 import { RightPanelTabs } from "./RightPanelTabs";
 import { LinkPullRequestDialogHost } from "./pullRequest/LinkPullRequestDialog";
+import { JThreadTicketsDialogHost } from "../custom/tickets/JThreadTicketsDialog";
 import { useDeviceState } from "~/state/device";
 import { DeviceSetup } from "./device/DeviceSetup";
 import { Dialog } from "./ui/dialog";
@@ -8769,6 +8770,7 @@ export default function ChatView(props: ChatViewProps) {
         </AlertDialogPopup>
       </AlertDialog>
       <LinkPullRequestDialogHost />
+      <JThreadTicketsDialogHost />
       {expandedImage && (
         <ExpandedImageDialog
           key={expandedImageKey(expandedImage)}

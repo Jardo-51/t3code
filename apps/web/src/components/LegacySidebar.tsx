@@ -225,6 +225,8 @@ import {
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { JSidebarTicketBadge } from "../custom/tickets/JThreadTicketBadges";
+
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -498,6 +500,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     ? resolveThreadCurrentPullRequestLink(thread.pullRequests)
     : null;
   const prStatus = prStatusIndicator(pr, linkedPullRequestStatus?.sourceControlProvider);
+  const showPullRequestBadge = useClientSettings((settings) => settings.jSidebarShowPullRequests);
   const isConfirmingArchive =
     canOperateThread && confirmingArchiveThreadKey === threadKey && !isThreadRunning;
   const threadMetaClassName = isConfirmingArchive
@@ -743,7 +746,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         onContextMenu={handleRowContextMenu}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-          {prStatus && pr && (
+          {showPullRequestBadge && prStatus && pr && (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -769,7 +772,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               </TooltipPopup>
             </Tooltip>
           )}
-          {!pr && currentLinkedPr ? (
+          {showPullRequestBadge && !pr && currentLinkedPr ? (
             <a
               href={currentLinkedPr.url}
               target="_blank"
@@ -782,6 +785,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               <PullRequestGlyph.pullRequest className="size-3" />
             </a>
           ) : null}
+          <JSidebarTicketBadge thread={thread} />
           {threadStatus && <ThreadStatusLabel status={threadStatus} />}
           {canOperateThread && renamingThreadKey === threadKey ? (
             <input

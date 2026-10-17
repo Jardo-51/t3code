@@ -32,6 +32,8 @@ import {
   type PromoteQueuedRunInput,
   type ReorderQueuedRunInput,
   type LinkThreadPullRequestInput,
+  type LinkThreadTicketInput,
+  type UnlinkThreadTicketInput,
   type RespondToThreadApprovalInput,
   type RespondToThreadUserInputInput,
   type DismissThreadUserInputInput,
@@ -68,6 +70,8 @@ import {
   resumeThreadQueue,
   retryWorkspacePreparation,
   linkThreadPullRequest,
+  linkThreadTicket,
+  unlinkThreadTicket,
   respondToThreadApproval,
   respondToThreadUserInput,
   dismissThreadUserInput,
@@ -102,6 +106,8 @@ export type LoadEarlierThreadHistoryInput = {
 
 export type {
   ArchiveThreadInput,
+  LinkThreadTicketInput,
+  UnlinkThreadTicketInput,
   CancelQueuedRunInput,
   CreateThreadInput,
   DeleteThreadInput,
@@ -255,6 +261,18 @@ export function createThreadEnvironmentAtoms<R, E>(
     unlinkPullRequest: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:unlink-pull-request",
       execute: (input: UnlinkThreadPullRequestInput) => unlinkThreadPullRequest(input),
+      scheduler,
+      concurrency,
+    }),
+    linkTicket: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:link-ticket",
+      execute: (input: LinkThreadTicketInput) => linkThreadTicket(input),
+      scheduler,
+      concurrency,
+    }),
+    unlinkTicket: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:unlink-ticket",
+      execute: (input: UnlinkThreadTicketInput) => unlinkThreadTicket(input),
       scheduler,
       concurrency,
     }),

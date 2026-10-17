@@ -326,10 +326,9 @@ elsewhere (remote SSH/WSL scripts, dev tooling) are left alone. The Electron pro
 still shared, so the two desktop apps cannot run at the same time.
 
 To keep existing data, stop T3 Code and move (do not copy) `~/.t3/userdata` to
-`~/.t3-jardo/userdata`. A copy would give both servers the same `environment-id`, and the old
-database may already hold fork-only events that upstream cannot read (see
-[Custom database migrations](#custom-database-migrations)). Leave `~/.t3/worktrees` where it is:
-existing threads reference it by absolute path, so do not delete `~/.t3` while they are in use.
+`~/.t3-jardo/userdata`. A copy would give both servers the same `environment-id`. Leave
+`~/.t3/worktrees` where it is: existing threads reference it by absolute path, so do not delete
+`~/.t3` while they are in use.
 
 ## Custom database migrations
 
@@ -373,28 +372,31 @@ indexes on them, and nullable or defaulted `j_` columns. Upstream never reads `j
 constraint, trigger, or unique index a fork migration puts on an upstream table can make upstream's
 own writes or migrations fail.
 
-Fork-only event types are the exception. Upstream decodes every stored event against its own event
-union when it replays history, so once a fork event such as `thread.j-ticket-linked` is stored, a
-plain upstream server fails on that database. Reverting then takes one extra step, deleting the
-fork's events before upstream starts on the database:
+Fork-only event types are the exception. V2 decodes every stored V2 event against its own event
+union when it builds server state, and fails on a type it does not know. So carry fork state on
+upstream events instead: ticket links are a `jTickets` field on the thread payload, which every
+thread event already carries and an upstream server drops when decoding (Effect Schema strips
+unknown keys). The fork stores no event types of its own, so reverting needs nothing beyond the
+optional cleanup below. The V1 events the fork used for ticket links before V2
+(`thread.j-ticket-linked`) are never decoded by V2, and its history compaction deletes them along
+with each imported thread's other V1 events.
 
-1. Stop the server and back up `state.sqlite`.
-2. Run `DELETE FROM orchestration_events WHERE event_type LIKE 'thread.j-%';`
+If a feature ever needs its own event type, reverting takes one extra step, deleting the fork's
+events before upstream starts on the database:
+
+1. Stop the server and back up `statev2.sqlite`.
+2. Run `DELETE FROM orchestration_events WHERE application_event_version = 2 AND event_type LIKE 'thread.j-%';`
 3. Optionally drop the fork's `j_` tables, such as `j_projection_thread_tickets` and
    `j_sql_migrations`. Upstream ignores them anyway.
 
 This works because nothing depends on the deleted rows. `orchestration_events.sequence` is
 `AUTOINCREMENT`, so a gap is never reused, and the server already expects gaps in the global
 sequence. A stream's next `stream_version` is its latest one plus one, so a gap can't collide with a
-later event. No other event or upstream projection references fork events. What stays behind is
-harmless: the `updatedAt` bumps fork events wrote to `projection_threads`, and the `j_` tables if
-you keep them. This procedure has not been tested against an upstream server. Add new fork event
-types only when the feature needs event sourcing.
+later event. This procedure has not been tested against an upstream server.
 
 The reasoning behind the `j_` prefix covers anything else that outlives one process or crosses to
-another version: fork-only orchestration command and event types (`thread.j-ticket.link`,
-`thread.j-ticket-linked`), environment capabilities (`jThreadTickets`) and persisted client settings
-(`jSidebarShowTickets`) carry a `j` marker. Stored events are replayed forever, so an upstream event
-that later took the same name with a different payload would make the fork's history undecodable.
-The marker is also what lets the revert procedure above select every fork event with one `LIKE`
-pattern.
+another version: fork-only orchestration command types (`thread.j-ticket.link`), fields on upstream
+payloads (`jTickets`), environment capabilities (`jThreadTickets`) and persisted client settings
+(`jSidebarShowTickets`) carry a `j` marker. Stored events are replayed forever, so an upstream name
+that later meant something else would make the fork's history undecodable. The marker is also what
+lets the revert procedure above select every fork event with one `LIKE` pattern.

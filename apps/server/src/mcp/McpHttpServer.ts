@@ -50,6 +50,8 @@ import { WorktreeToolkit } from "./toolkits/worktree/tools.ts";
 import * as WorktreeMcpService from "./WorktreeMcpService.ts";
 import * as PullRequestsHandlers from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
+import * as JTicketsHandlers from "./toolkits/jTickets/handlers.ts";
+import { J_TICKET_MCP_INSTRUCTIONS, JTicketsToolkit } from "./toolkits/jTickets/tools.ts";
 import * as DeviceHandlers from "./toolkits/device/handlers.ts";
 import {
   DeviceScreenshotTool,
@@ -809,6 +811,8 @@ export const layerPullRequestsToolkit = toolkitRegistration(
   PullRequestsHandlers.layer,
 );
 
+const layerJTicketsToolkit = toolkitRegistration(JTicketsToolkit, JTicketsHandlers.layer);
+
 const layerDeviceStandardToolkitRegistration = toolkitRegistration(
   DeviceStandardToolkit,
   DeviceHandlers.layerStandard,
@@ -827,6 +831,7 @@ export const layerDeviceToolkit = Layer.mergeAll(
 export const layerMcpTransport = McpServer.layerHttp({
   name: "T3 Code",
   version: packageJson.version,
+  instructions: J_TICKET_MCP_INSTRUCTIONS,
   path: "/mcp",
   protocols: [McpProtocol.v2025_06_18],
   allowSessionTermination: true,
@@ -842,6 +847,7 @@ export const layer = Layer.mergeAll(
   layerPreviewControlsRegistration,
   layerWorktreeToolkitRegistration,
   layerPullRequestsToolkit,
+  layerJTicketsToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,
 ).pipe(Layer.provideMerge(layerMcpTransport));

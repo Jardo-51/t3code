@@ -149,6 +149,8 @@ function commandThreadIds(command: OrchestrationV2Command): ReadonlyArray<Thread
     case "thread.metadata.update":
     case "thread.pull-request.link":
     case "thread.pull-request.unlink":
+    case "thread.j-ticket.link":
+    case "thread.j-ticket.unlink":
     case "thread.pull-request-link.sync":
     case "thread.pull-request.watch":
     case "thread.pull-request.sync":

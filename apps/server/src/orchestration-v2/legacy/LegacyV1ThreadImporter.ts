@@ -31,6 +31,7 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import * as EventSink from "../EventSink.ts";
+import { importJLegacyThreadTickets } from "./JLegacyThreadTickets.ts";
 import { randomUuidV4 } from "@t3tools/provider-core/server/randomUuid";
 
 const IMPORT_EVENT_PREFIX = "migration:v1";
@@ -656,6 +657,7 @@ const make = Effect.gen(function* () {
   });
 
   const reconcileShells = reconcileShellsBase.pipe(
+    Effect.tap(() => importJLegacyThreadTickets(sql, eventSink)),
     Effect.mapError((cause) => new LegacyV1ThreadImportError({ operation: "import", cause })),
   );
 
