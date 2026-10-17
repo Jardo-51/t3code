@@ -14,10 +14,10 @@
  * listed in `migrationEntries` like `Migrations.ts` does.
  */
 
-import * as Migrator from "effect/unstable/sql/Migrator";
+import * as Migrator from "effect/sql/Migrator";
 import * as Effect from "effect/Effect";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type * as SqlClient from "effect/sql/SqlClient";
+import type { SqlError } from "effect/sql/SqlError";
 
 import Migration0001 from "./JardoForkMigrations/001_ProjectionThreadTickets.ts";
 

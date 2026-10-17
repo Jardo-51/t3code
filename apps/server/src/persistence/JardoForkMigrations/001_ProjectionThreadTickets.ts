@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 /** Thread ↔ ticket links. `thread_id` is a plain column, not a foreign key (see the fork rules). */
 export default Effect.gen(function* () {

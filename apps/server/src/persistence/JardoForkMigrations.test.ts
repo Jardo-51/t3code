@@ -1,11 +1,11 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 import { runJardoForkMigrations, type JardoForkMigrationEntry } from "./JardoForkMigrations.ts";
 import { runMigrations } from "./Migrations.ts";
-import { SqlitePersistenceMemory } from "./Layers/Sqlite.ts";
+import * as Sqlite from "./Sqlite.ts";
 
 const createProbeTable = (table: string) =>
   Effect.gen(function* () {
@@ -61,7 +61,7 @@ it.layer(NodeSqliteClient.layer({ filename: ":memory:" }))("JardoForkMigrations"
   );
 });
 
-it.layer(SqlitePersistenceMemory)("SqlitePersistence startup", (it) => {
+it.layer(Sqlite.layerMemory)("SqlitePersistence startup", (it) => {
   it.effect("creates a tracking table for each migration track", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
