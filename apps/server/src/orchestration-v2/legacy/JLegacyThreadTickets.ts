@@ -31,7 +31,9 @@ const decodeTicket = Schema.decodeUnknownOption(JThreadTicket);
  * Copies the links the V1 fork build kept in `j_projection_thread_tickets` onto the imported V2
  * threads. Like upstream's V1 projection tables, the table stays as the import source; its V1
  * events are retired with the thread's other V1 events by event store compaction. A payload
- * without `jTickets` predates this import, so a thread is imported once and later unlinks stick.
+ * without `jTickets` predates this import, so a thread is imported once and later unlinks stick,
+ * as long as only fork servers write the thread (see the revert notes in
+ * docs/jardo/forking-strategy.md).
  */
 export const importJLegacyThreadTickets = (
   sql: SqlClient.SqlClient,
@@ -55,18 +57,31 @@ export const importJLegacyThreadTickets = (
     const now = yield* DateTime.now;
     let importedThreadCount = 0;
     for (const group of Map.groupBy(rows, (row) => row.thread_id).values()) {
+      const threadId = group[0]!.thread_id;
       const stored = decodeStoredThread(group[0]!.payload_json);
-      if (Option.isNone(stored)) continue;
-      const jTickets = group.flatMap((row) =>
-        Option.toArray(
-          decodeTicket({
+      if (Option.isNone(stored)) {
+        yield* Effect.logWarning("Skipped V1 ticket links of an undecodable V2 thread", {
+          threadId,
+        });
+        continue;
+      }
+      const jTickets: Array<JThreadTicket> = [];
+      for (const row of group) {
+        const ticket = decodeTicket({
+          url: row.url,
+          key: row.key,
+          source: row.source,
+          linkedAt: row.linked_at,
+        });
+        if (Option.isSome(ticket)) {
+          jTickets.push(ticket.value);
+        } else {
+          yield* Effect.logWarning("Skipped an undecodable V1 ticket link", {
+            threadId,
             url: row.url,
-            key: row.key,
-            source: row.source,
-            linkedAt: row.linked_at,
-          }),
-        ),
-      );
+          });
+        }
+      }
       const thread: OrchestrationV2AppThread = { ...stored.value, jTickets };
       yield* eventSink.write({
         events: [

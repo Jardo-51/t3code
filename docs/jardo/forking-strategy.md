@@ -381,6 +381,12 @@ optional cleanup below. The V1 events the fork used for ticket links before V2
 (`thread.j-ticket-linked`) are never decoded by V2, and its history compaction deletes them along
 with each imported thread's other V1 events.
 
+Going back to the fork after running upstream has one catch. Upstream drops `jTickets` from every
+thread payload it writes, and the fork's one-time import of V1 links takes a payload without
+`jTickets` for a thread it never imported. So it re-applies the links `j_projection_thread_tickets`
+held at the first V2 upgrade: tickets unlinked since come back. Run
+`DELETE FROM j_projection_thread_tickets;` before starting the fork again to avoid that.
+
 If a feature ever needs its own event type, reverting takes one extra step, deleting the fork's
 events before upstream starts on the database:
 
