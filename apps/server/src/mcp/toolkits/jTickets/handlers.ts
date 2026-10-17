@@ -1,5 +1,5 @@
 import { CommandId, type OrchestrationV2ServerCommand, type ThreadId } from "@t3tools/contracts";
-import { parseTicketUrl, ticketKeyFromUrl } from "@t3tools/shared/jThreadTickets";
+import { parseTicketUrl, ticketIdentity, ticketKeyFromUrl } from "@t3tools/shared/jThreadTickets";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -74,7 +74,8 @@ const make = Effect.gen(function* () {
         const url = yield* requireUrl(input.url);
         const key = input.key ?? ticketKeyFromUrl(url);
         if (key === null) return yield* new TicketKeyRequiredError();
-        const existing = thread.jTickets?.find((ticket) => ticket.url === url);
+        const identity = ticketIdentity(url);
+        const existing = thread.jTickets?.find((ticket) => ticketIdentity(ticket.url) === identity);
         if (existing !== undefined && existing.key === key) {
           return { url, key, alreadyLinked: true };
         }
@@ -93,7 +94,8 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const thread = yield* requireThread(input.threadId);
         const url = yield* requireUrl(input.url);
-        if (!thread.jTickets?.some((ticket) => ticket.url === url)) {
+        const identity = ticketIdentity(url);
+        if (!thread.jTickets?.some((ticket) => ticketIdentity(ticket.url) === identity)) {
           return { url, wasLinked: false };
         }
         yield* dispatch({

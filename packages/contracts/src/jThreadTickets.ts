@@ -9,7 +9,10 @@ import { CommandId, IsoDateTime, ThreadId, TrimmedNonEmptyString } from "./baseS
 export const JThreadTicketSource = Schema.Literals(["agent", "manual"]);
 export type JThreadTicketSource = typeof JThreadTicketSource.Type;
 
-/** A ticket is identified by its URL; `key` is the ID shown for it, such as PROJ-123. */
+/**
+ * A ticket is identified by its URL, read through `ticketIdentity` in `@t3tools/shared` so other
+ * URLs of the same ticket match it; `key` is the ID shown for it, such as PROJ-123.
+ */
 export const JThreadTicket = Schema.Struct({
   url: TrimmedNonEmptyString,
   key: TrimmedNonEmptyString,

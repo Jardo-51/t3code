@@ -3,6 +3,7 @@ import type {
   OrchestrationV2AppThread,
   OrchestrationV2ServerCommand,
 } from "@t3tools/contracts";
+import { ticketIdentity } from "@t3tools/shared/jThreadTickets";
 import * as DateTime from "effect/DateTime";
 
 export type JThreadTicketCommand = Extract<
@@ -26,14 +27,21 @@ export function applyJThreadTicketCommand(
   now: DateTime.Utc,
 ): OrchestrationV2AppThread {
   const tickets = jThreadTicketsOf(thread);
-  const existing = tickets.find((ticket) => ticket.url === command.url);
+  const identity = ticketIdentity(command.url);
+  const isSameTicket = (ticket: JThreadTicket) => ticketIdentity(ticket.url) === identity;
+  const existing = tickets.find(isSameTicket);
   if (command.type === "thread.j-ticket.unlink") {
     return existing === undefined
       ? thread
-      : { ...thread, jTickets: tickets.filter((ticket) => ticket !== existing), updatedAt: now };
+      : {
+          ...thread,
+          jTickets: tickets.filter((ticket) => !isSameTicket(ticket)),
+          updatedAt: now,
+        };
   }
   if (existing !== undefined) {
-    // Relinking corrects the shown ID, but an agent never overrides one the user entered.
+    // The first URL stays. Relinking corrects the shown ID, but an agent never overrides one the
+    // user entered.
     if (
       existing.key === command.key ||
       (existing.source === "manual" && command.source === "agent")

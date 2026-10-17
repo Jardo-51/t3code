@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { parseTicketUrl, ticketKeyFromUrl } from "./jThreadTickets.ts";
+import { parseTicketUrl, ticketIdentity, ticketKeyFromUrl } from "./jThreadTickets.ts";
 
 describe("ticketKeyFromUrl", () => {
   it.each([
@@ -40,5 +40,31 @@ describe("parseTicketUrl", () => {
     expect(parseTicketUrl("javascript:alert(1)")).toBeNull();
     expect(parseTicketUrl("file:///etc/passwd")).toBeNull();
     expect(parseTicketUrl(`https://example.com/${"a".repeat(2048)}`)).toBeNull();
+  });
+});
+
+describe("ticketIdentity", () => {
+  it.each([
+    ["https://linear.app/acme/issue/ENG-7", "https://linear.app/acme/issue/ENG-7/fix-the-thing"],
+    [
+      "https://acme.atlassian.net/browse/PROJ-1",
+      "https://acme.atlassian.net/jira/software/projects/PROJ/boards/1?selectedIssue=PROJ-1",
+    ],
+    ["https://acme.atlassian.net/browse/PROJ-1", "http://acme.atlassian.net/browse/PROJ-1#comment"],
+    [
+      "https://github.com/owner/repo/issues/5",
+      "https://github.com/owner/repo/issues/5#issuecomment-1",
+    ],
+    ["https://example.com/tickets/88", "https://example.com/tickets/88/#top"],
+  ])("matches %s and %s", (first, second) => {
+    expect(ticketIdentity(first)).toBe(ticketIdentity(second));
+  });
+
+  it.each([
+    ["https://acme.atlassian.net/browse/PROJ-1", "https://other.atlassian.net/browse/PROJ-1"],
+    ["https://github.com/a/repo/issues/5", "https://github.com/b/repo/issues/5"],
+    ["https://example.com/view?id=88", "https://example.com/view?id=89"],
+  ])("tells %s and %s apart", (first, second) => {
+    expect(ticketIdentity(first)).not.toBe(ticketIdentity(second));
   });
 });

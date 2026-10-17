@@ -91,4 +91,24 @@ describe("applyJThreadTicketCommand", () => {
     );
     assert.strictEqual(applyJThreadTicketCommand(unlinked, unlink, later), unlinked);
   });
+
+  it("matches another URL form of a linked ticket", () => {
+    const linked = applyJThreadTicketCommand(thread, link("PROJ-1", "manual"), now);
+    const otherForm = `${url}?focusedCommentId=10#comment-10`;
+    assert.strictEqual(
+      applyJThreadTicketCommand(linked, link("PROJ-1", "agent", otherForm), later),
+      linked,
+    );
+    const unlinked = applyJThreadTicketCommand(
+      linked,
+      {
+        type: "thread.j-ticket.unlink",
+        commandId: CommandId.make("unlink"),
+        threadId,
+        url: otherForm,
+      },
+      later,
+    );
+    assert.deepStrictEqual(unlinked.jTickets, []);
+  });
 });
