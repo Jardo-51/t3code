@@ -1,5 +1,4 @@
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
-import { threadTicketSearchTerms } from "@t3tools/shared/threadTickets";
 import type { CommandPaletteLinkedThreads } from "../commandPaletteBus";
 import {
   type EnvironmentId,
@@ -251,7 +250,6 @@ export type BuildThreadActionItemsThread = Pick<
   | "worktreePath"
 > & {
   pullRequests?: SidebarThreadSummary["pullRequests"];
-  tickets?: SidebarThreadSummary["tickets"];
   updatedAt: string;
   latestUserMessageAt?: string | null;
 };
@@ -307,7 +305,6 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
         searchTerms: [
           thread.title,
           ...threadPullRequestSearchTerms(thread),
-          ...threadTicketSearchTerms(thread),
           projectTitle ?? ``,
           thread.branch ?? ``,
           contentMatch?.snippet ?? ``,

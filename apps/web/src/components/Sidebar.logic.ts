@@ -1,5 +1,4 @@
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
-import { threadTicketSearchTerms } from "@t3tools/shared/threadTickets";
 import * as React from "react";
 import { defaultAnimateLayoutChanges, type AnimateLayoutChanges } from "@dnd-kit/sortable";
 import {
@@ -876,8 +875,7 @@ export function searchSidebarThreads<
     readonly environmentId: EnvironmentId;
     readonly id: ThreadId;
     readonly title: string;
-  } & Parameters<typeof threadPullRequestSearchTerms>[0] &
-    Parameters<typeof threadTicketSearchTerms>[0],
+  } & Parameters<typeof threadPullRequestSearchTerms>[0],
 >(
   threads: readonly T[],
   query: string,
@@ -888,11 +886,9 @@ export function searchSidebarThreads<
   const titleMatches: T[] = [];
   const contentMatches: T[] = [];
   for (const thread of threads) {
-    const matchesTitle = [
-      thread.title,
-      ...threadPullRequestSearchTerms(thread),
-      ...threadTicketSearchTerms(thread),
-    ].some((term) => term.toLowerCase().includes(normalizedQuery));
+    const matchesTitle = [thread.title, ...threadPullRequestSearchTerms(thread)].some((term) =>
+      term.toLowerCase().includes(normalizedQuery),
+    );
     if (matchesTitle) {
       titleMatches.push(thread);
     } else if (
