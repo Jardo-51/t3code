@@ -393,7 +393,8 @@ events before upstream starts on the database:
 1. Stop the server and back up `statev2.sqlite`.
 2. Run `DELETE FROM orchestration_events WHERE application_event_version = 2 AND event_type LIKE 'thread.j-%';`
 3. Optionally drop the fork's `j_` tables, such as `j_projection_thread_tickets` and
-   `j_sql_migrations`. Upstream ignores them anyway.
+   `j_sql_migrations`. Upstream ignores them anyway. Drop them all or none: a fork migration
+   recorded in `j_sql_migrations` never runs again, so the fork would not recreate its tables.
 
 This works because nothing depends on the deleted rows. `orchestration_events.sequence` is
 `AUTOINCREMENT`, so a gap is never reused, and the server already expects gaps in the global
