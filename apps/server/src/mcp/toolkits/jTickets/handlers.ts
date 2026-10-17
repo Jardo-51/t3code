@@ -76,8 +76,10 @@ const make = Effect.gen(function* () {
         if (key === null) return yield* new TicketKeyRequiredError();
         const identity = ticketIdentity(url);
         const existing = thread.jTickets?.find((ticket) => ticketIdentity(ticket.url) === identity);
-        if (existing !== undefined && existing.key === key) {
-          return { url, key, alreadyLinked: true };
+        // Mirrors the decider, which keeps the first URL and never lets an agent override the ID
+        // the user entered, so the agent learns what is stored and no no-op event is emitted.
+        if (existing !== undefined && (existing.key === key || existing.source === "manual")) {
+          return { url: existing.url, key: existing.key, alreadyLinked: true };
         }
         yield* dispatch({
           type: "thread.j-ticket.link",
@@ -87,7 +89,7 @@ const make = Effect.gen(function* () {
           key,
           source: "agent",
         });
-        return { url, key, alreadyLinked: existing !== undefined };
+        return { url: existing?.url ?? url, key, alreadyLinked: existing !== undefined };
       }),
     ),
     unlink_ticket: writesThread((input) =>
