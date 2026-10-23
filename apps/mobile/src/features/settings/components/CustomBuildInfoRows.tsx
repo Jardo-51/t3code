@@ -2,8 +2,8 @@ import Constants from "expo-constants";
 import { View } from "react-native";
 
 import type { CustomBuildInfo } from "../../../../../../custom/build-info";
-import { SymbolView } from "../../../components/AppSymbol";
-import { AppText as Text } from "../../../components/AppText";
+import { SymbolView } from "../../../components/ui/AppSymbol";
+import { AppText as Text } from "../../../components/ui/AppText";
 
 const builtAtFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
