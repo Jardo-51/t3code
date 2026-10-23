@@ -102,6 +102,7 @@ import {
   isUndeliveredMailboxSteer,
 } from "./NotificationMailbox.ts";
 import { EventSinkV2 } from "./EventSink.ts";
+import { applyJThreadTicketCommand } from "./JThreadTickets.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
 import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
@@ -442,6 +443,8 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.metadata.update":
     case "thread.pull-request.link":
     case "thread.pull-request.unlink":
+    case "thread.j-ticket.link":
+    case "thread.j-ticket.unlink":
     case "thread.pull-request-link.sync":
     case "thread.pull-request.watch":
     case "thread.pull-request-watch.sync":
@@ -2401,6 +2404,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           | "thread.metadata.update"
           | "thread.pull-request.link"
           | "thread.pull-request.unlink"
+          | "thread.j-ticket.link"
+          | "thread.j-ticket.unlink"
           | "thread.pull-request-link.sync"
           | "thread.pull-request.watch"
           | "thread.pull-request-watch.sync"
@@ -3004,6 +3009,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             updatedAt: now,
           };
         }
+        case "thread.j-ticket.link":
+        case "thread.j-ticket.unlink":
+          return applyJThreadTicketCommand(thread, command, now);
         case "thread.pull-request.link":
         case "thread.pull-request.unlink":
         case "thread.pull-request-link.sync": {
@@ -3255,6 +3263,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           return "thread.marked-unread" as const;
         case "thread.metadata.update":
         case "thread.title.regeneration.complete":
+        case "thread.j-ticket.link":
+        case "thread.j-ticket.unlink":
           return "thread.metadata-updated" as const;
         case "thread.pull-request.link":
         case "thread.pull-request.unlink":
@@ -10730,6 +10740,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "thread.metadata.update":
       case "thread.pull-request.link":
       case "thread.pull-request.unlink":
+      case "thread.j-ticket.link":
+      case "thread.j-ticket.unlink":
       case "thread.pull-request-link.sync":
       case "thread.pull-request.watch":
       case "thread.pull-request.sync":

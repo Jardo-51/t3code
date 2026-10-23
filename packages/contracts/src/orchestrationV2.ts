@@ -54,6 +54,11 @@ import {
   ThreadPullRequestWatch,
 } from "./threadPullRequest.ts";
 import {
+  JThreadTicket,
+  JThreadTicketLinkCommand,
+  JThreadTicketUnlinkCommand,
+} from "./jThreadTickets.ts";
+import {
   ProviderApprovalDecision,
   ProviderApprovalOption,
   ProviderInteractionMode,
@@ -367,6 +372,7 @@ export const OrchestrationV2AppThread = Schema.Struct({
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.optional(Schema.Array(ThreadPullRequestLink)),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+  jTickets: Schema.optional(Schema.Array(JThreadTicket)),
   activeProviderThreadId: Schema.NullOr(ProviderThreadId),
   historyOrigin: Schema.optional(OrchestrationV2ThreadHistoryOrigin),
   lineage: OrchestrationV2AppThreadLineage,
@@ -1803,6 +1809,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
   pullRequests: Schema.optional(Schema.Array(ThreadPullRequestLink)),
   branchPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
+  jTickets: Schema.optional(Schema.Array(JThreadTicket)),
   lineage: OrchestrationV2AppThreadLineage,
   forkedFrom: Schema.NullOr(OrchestrationV2AppThread.fields.forkedFrom),
   activeProviderThreadId: Schema.NullOr(ProviderThreadId),
@@ -2688,6 +2695,8 @@ export const OrchestrationV2Command = Schema.Union([
     threadId: ThreadId,
     ...ThreadPullRequestKey.fields,
   }),
+  JThreadTicketLinkCommand,
+  JThreadTicketUnlinkCommand,
   Schema.Struct({
     type: Schema.Literal("thread.pull-request-link.sync"),
     commandId: CommandId,

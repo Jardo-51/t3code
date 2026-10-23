@@ -286,6 +286,7 @@ import {
   type ComposerThreadDraftState,
   type DraftSessionState,
 } from "../composerDraftStore";
+import { JSidebarThreadBadges } from "../custom/tickets/JThreadTicketBadges";
 
 const EMPTY_PROVIDER_ENTRIES: ReadonlyMap<string, ProviderInstanceEntry> = new Map();
 // Collapsed shelves share one empty list so a route change alone does not
@@ -2032,7 +2033,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 Regenerating title
               </span>
             ) : null}
-            {prBadge}
+            <JSidebarThreadBadges thread={thread} prBadge={prBadge} />
             {sortable?.isDragging ? (
               dragDestination
             ) : (
@@ -2359,7 +2360,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 <span className="flex-1" />
               )}
               {terminalStatusIcon}
-              {prBadge}
+              <JSidebarThreadBadges thread={thread} prBadge={prBadge} />
               {diff ? (
                 <span className="shrink-0 font-mono">
                   <span className="text-diff-addition-foreground">

@@ -70,6 +70,7 @@ import { ComposerControl } from "./chat/ComposerControl";
 import { MiddleTruncate } from "./ui/middle-truncate";
 import { BranchPicker, BranchPickerRefItem } from "./BranchPicker";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { JComposerTicketBadges } from "../custom/tickets/JThreadTicketBadges";
 
 export interface BranchToolbarBranchSelectorHandle {
   open: () => void;
@@ -740,6 +741,9 @@ export function BranchToolbarBranchSelector({
               if (targetUrl) openPrLink(event, targetUrl);
             }}
           />
+        ) : null}
+        {displayMode !== "panel" ? (
+          <JComposerTicketBadges threadRef={threadRef} tickets={serverThread?.jTickets} />
         ) : null}
         <span
           className="flex min-w-0"

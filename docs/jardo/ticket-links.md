@@ -7,6 +7,10 @@ included.
 A ticket link is the ticket's URL plus the ID shown for it. T3 Code never contacts the tracker, so
 there is nothing to configure and no credentials to provide.
 
+Trackers often have several URLs for one ticket, such as Linear's with and without the title, or a
+Jira ticket opened from a board. Linking another URL of a ticket the thread already has keeps the
+first one, and unlinking with any of them removes it.
+
 ## Linking a ticket
 
 - **Agents** link the ticket a thread is for with the `link_ticket` tool as soon as they know its

@@ -208,6 +208,7 @@ import { Checkbox } from "./ui/checkbox";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
+import { jThreadTicketsPaletteAction } from "../custom/tickets/jThreadTicketsPaletteAction";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
 import { toggleThemeEditorForTheme } from "./settings/themeEditorStore";
 import { searchSettings, SETTINGS_SECTION_LABELS } from "./settings/settingsSearch";
@@ -1755,6 +1756,12 @@ function OpenCommandPaletteDialog(props: {
       });
     }
   }
+
+  const ticketsAction = jThreadTicketsPaletteAction(
+    activeThread,
+    activeThreadServerConfig?.environment.capabilities,
+  );
+  if (ticketsAction !== null) actionItems.push(ticketsAction);
 
   if (activeThread !== null) {
     const thread = activeThread;

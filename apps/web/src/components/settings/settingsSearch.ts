@@ -323,6 +323,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["hide fold running monitoring threads inbox sidebar shelf"],
   },
   {
+    id: "j-sidebar-pull-requests",
+    title: "Pull requests in sidebar",
+    to: "/settings/general",
+    searchTerms: ["pr badge thread row hide narrow"],
+  },
+  {
+    id: "j-sidebar-tickets",
+    title: "Tickets in sidebar",
+    to: "/settings/general",
+    searchTerms: ["ticket jira linear issue badge thread row hide narrow"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",
