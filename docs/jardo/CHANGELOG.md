@@ -5,11 +5,17 @@ All notable changes against the [upstream repo](https://github.com/pingdotgg/t3c
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1-nightly.20261017.3238-jardo.1] - Unreleased
+## [0.1.1-nightly.20261017.3238-jardo.1] - 2026-10-23
+
+Version with Orchestrator V2.
 
 ### Changed
 
 - [#11](https://github.com/Jardo-51/t3code/issues/11) Ticket links re-implemented on upstream's V2 orchestration. Existing links carry over when you update. See [docs](ticket-links.md).
+
+### Removed
+
+- [#13625](https://github.com/pingdotgg/t3code/issues/13625) False completion sound/notification fix (due to Orchestrator V2).
 
 ## [0.0.43-nightly.20260926.2282-jardo.1] - 2026-10-02
 
