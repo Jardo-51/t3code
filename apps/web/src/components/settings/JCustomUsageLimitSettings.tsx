@@ -8,7 +8,7 @@ import {
 import { formatUsd } from "@t3tools/shared/usageFormat";
 import { useAtomValue } from "@effect/atom-react";
 import { PlusIcon } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
 import { randomUUID } from "../../lib/utils";
@@ -155,6 +155,7 @@ function CustomLimitDialog({
   readonly onSave: (limit: JCustomUsageLimit) => void;
 }) {
   const options = useAtomValue(jProviderOptionsAtom);
+  const formId = useId();
   const [name, setName] = useState(initial?.name ?? "");
   const [limitUsd, setLimitUsd] = useState(initial ? String(initial.limitUsd) : "");
   const [markup, setMarkup] = useState(initial ? String(initial.markupPercent) : "0");
@@ -224,6 +225,7 @@ function CustomLimitDialog({
         </DialogHeader>
         <DialogPanel>
           <form
+            id={formId}
             className="grid gap-4"
             onSubmit={(event) => {
               event.preventDefault();
@@ -306,7 +308,7 @@ function CustomLimitDialog({
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={!canSave}>
+          <Button form={formId} type="submit" disabled={!canSave}>
             {initial ? "Save limit" : "Add limit"}
           </Button>
         </DialogFooter>
