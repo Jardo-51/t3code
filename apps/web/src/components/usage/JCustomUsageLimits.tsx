@@ -1,31 +1,28 @@
-import type { EnvironmentId, UsageSummaryInput } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import { refreshUsage } from "@t3tools/client-runtime/state/usage";
 import {
-  jCustomUsageLimitMonth,
   jCustomUsageLimitSpend,
   type JCustomUsageLimitSpend,
 } from "@t3tools/shared/jCustomUsageLimits";
 import { formatCount, formatUsd } from "@t3tools/shared/usageFormat";
 import { paceOf } from "@t3tools/shared/usageLimits";
 import { WalletIcon } from "lucide-react";
-import { useEffect, useEffectEvent, useRef } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
-import { appAtomRegistry } from "../../rpc/atomRegistry";
-import { environmentPresentations } from "../../state/presentation";
-import { serverEnvironment } from "../../state/server";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { PaceIcon, WindowBar, barColor } from "./UsageLimits";
 import {
   type JProviderOption,
   type JEnvironmentMonthUsage,
   type JStoredCustomUsageLimit,
+  jCountedEnvironmentIds,
   jCustomUsageLimitsAtom,
   jCustomUsageMonthAtom,
+  jCustomUsageMonthInput,
   jCustomUsageMonthKey,
   jProviderKey,
   jProviderOptionsAtom,
+  jShownCustomUsageLimits,
 } from "./jCustomUsageLimitsState";
 
 /**
@@ -39,9 +36,9 @@ export function JCustomUsageLimitsSection({
   readonly selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null;
   readonly now: number;
 }) {
-  const stored = useAtomValue(jCustomUsageLimitsAtom);
-  const shown = stored.filter(
-    (entry) => selectedEnvironmentIds === null || selectedEnvironmentIds.has(entry.environmentId),
+  const shown = jShownCustomUsageLimits(
+    useAtomValue(jCustomUsageLimitsAtom),
+    selectedEnvironmentIds,
   );
   // Only mounted with limits, so pages without any never scan this month's usage.
   return shown.length === 0 ? null : <JCustomUsageLimitCards limits={shown} now={now} />;
@@ -54,32 +51,12 @@ function JCustomUsageLimitCards({
   readonly limits: readonly JStoredCustomUsageLimit[];
   readonly now: number;
 }) {
-  const { sinceDay, untilDay } = jCustomUsageLimitMonth(now);
-  const input: UsageSummaryInput = { sinceDay, untilDay, timeZone: "UTC" };
-  const environmentIds = limits.flatMap((entry) =>
-    entry.limit.providers.map((provider) => provider.environmentId),
-  );
   const environments = useAtomValue(
-    jCustomUsageMonthAtom(jCustomUsageMonthKey(input, environmentIds)),
+    jCustomUsageMonthAtom(
+      jCustomUsageMonthKey(jCustomUsageMonthInput(now), jCountedEnvironmentIds(limits)),
+    ),
   );
   const options = useAtomValue(jProviderOptionsAtom);
-  const refreshMonth = useEffectEvent(() => {
-    void refreshUsage({
-      registry: appAtomRegistry,
-      server: serverEnvironment,
-      presentations: environmentPresentations,
-      environmentIds: environments
-        .filter((environment) => environment.canReadDiagnostics)
-        .map(({ environmentId }) => environmentId),
-      input,
-    });
-  });
-  // The page advances `now` on refresh. The month summary stays cached for a minute, so without
-  // this the spend would lag behind the refreshed pace and reset text.
-  const mountedNow = useRef(now);
-  useEffect(() => {
-    if (now !== mountedNow.current) refreshMonth();
-  }, [now]);
   const statuses = new Map(environments.map((status) => [status.environmentId, status]));
   const summaries = new Map(environments.map((status) => [status.environmentId, status.summary]));
   const providers = new Map(options.map((option) => [option.key, option]));

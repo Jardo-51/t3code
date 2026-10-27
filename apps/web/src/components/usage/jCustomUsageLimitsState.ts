@@ -8,10 +8,13 @@ import {
   type UsageSummary,
   type UsageSummaryInput,
 } from "@t3tools/contracts";
+import { refreshUsage } from "@t3tools/client-runtime/state/usage";
 import { resolveUsageAccess } from "@t3tools/client-runtime/state/usage-access";
+import { jCustomUsageLimitMonth } from "@t3tools/shared/jCustomUsageLimits";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 
+import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { environmentPresentations } from "../../state/presentation";
 import { serverEnvironment } from "../../state/server";
 import { environmentSession } from "../../state/session";
@@ -141,3 +144,54 @@ export const jCustomUsageMonthAtom = Atom.family((key: string) =>
     });
   }).pipe(Atom.withLabel(`web-j-custom-usage-month:${key}`)),
 );
+
+/** Limits saved on the selected environments; `null` selects every environment. */
+export function jShownCustomUsageLimits(
+  stored: readonly JStoredCustomUsageLimit[],
+  selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null,
+): readonly JStoredCustomUsageLimit[] {
+  return stored.filter(
+    (entry) => selectedEnvironmentIds === null || selectedEnvironmentIds.has(entry.environmentId),
+  );
+}
+
+/** The environments whose spend the limits count, which can include unselected ones. */
+export function jCountedEnvironmentIds(
+  limits: readonly JStoredCustomUsageLimit[],
+): readonly EnvironmentId[] {
+  return limits.flatMap((entry) => entry.limit.providers.map((provider) => provider.environmentId));
+}
+
+export function jCustomUsageMonthInput(now: number): UsageSummaryInput {
+  const { sinceDay, untilDay } = jCustomUsageLimitMonth(now);
+  return { sinceDay, untilDay, timeZone: "UTC" };
+}
+
+/**
+ * Re-reads this month's usage behind the shown limits. Only the Limits refresh button calls it:
+ * the page also refreshes limits automatically on every tab open, and forcing a rescan of each
+ * counted environment then would bypass the summary's cache.
+ */
+export async function refreshJCustomUsageMonth(
+  selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null,
+  now: number,
+): Promise<void> {
+  const limits = jShownCustomUsageLimits(
+    appAtomRegistry.get(jCustomUsageLimitsAtom),
+    selectedEnvironmentIds,
+  );
+  if (limits.length === 0) return;
+  const input = jCustomUsageMonthInput(now);
+  const environments = appAtomRegistry.get(
+    jCustomUsageMonthAtom(jCustomUsageMonthKey(input, jCountedEnvironmentIds(limits))),
+  );
+  await refreshUsage({
+    registry: appAtomRegistry,
+    server: serverEnvironment,
+    presentations: environmentPresentations,
+    environmentIds: environments
+      .filter((environment) => environment.canReadDiagnostics)
+      .map(({ environmentId }) => environmentId),
+    input,
+  });
+}

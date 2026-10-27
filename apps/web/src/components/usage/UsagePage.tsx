@@ -85,6 +85,7 @@ import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { UsageLimitsSection } from "./UsageLimits";
 import { JCustomUsageLimitsSection } from "./JCustomUsageLimits";
+import { refreshJCustomUsageMonth } from "./jCustomUsageLimitsState";
 import { UsagePriceOverrides } from "./UsagePriceOverrides";
 import { UsageProviderChart } from "./UsageProviderChart";
 import { SpeedPremium, UsageModelDialog } from "./UsageModelDialog";
@@ -308,7 +309,10 @@ export function UsagePage() {
     if (showingLimits) {
       refreshingRef.current = true;
       setIsRefreshing(true);
-      void refreshLimits().finally(() => {
+      void Promise.all([
+        refreshLimits(),
+        refreshJCustomUsageMonth(selectedEnvironmentIds, Date.now()),
+      ]).finally(() => {
         refreshingRef.current = false;
         setIsRefreshing(false);
       });
