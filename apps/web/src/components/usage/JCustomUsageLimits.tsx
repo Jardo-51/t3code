@@ -144,6 +144,26 @@ function JCustomUsageLimitCard({
       `Usage isn't tracked per provider on ${environmentLabel(environmentId)}, so its spend is missing.`,
     );
   }
+  const sharedGroups = new Set<string>();
+  for (const { provider, sharedWithChosen } of spend.providers) {
+    if (sharedWithChosen.length === 0) continue;
+    const group = [provider, ...sharedWithChosen].toSorted((a, b) =>
+      jProviderKey(a).localeCompare(jProviderKey(b)),
+    );
+    const groupKey = group.map(jProviderKey).join("\n");
+    if (sharedGroups.has(groupKey)) continue;
+    sharedGroups.add(groupKey);
+    const acrossEnvironments = group.some(
+      (member) => member.environmentId !== provider.environmentId,
+    );
+    const names = group.map((member) => {
+      const name = providerName(jProviderKey(member), member.instanceId);
+      return acrossEnvironments ? `${name} on ${environmentLabel(member.environmentId)}` : name;
+    });
+    notices.push(
+      `${new Intl.ListFormat("en").format(names)} read one history, so it counts once towards the total.`,
+    );
+  }
   for (const { provider, spentUsd, hasHistory, sharedWith } of spend.providers) {
     const key = jProviderKey(provider);
     const name = providerName(key, provider.instanceId);

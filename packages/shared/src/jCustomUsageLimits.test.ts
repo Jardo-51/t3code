@@ -149,6 +149,47 @@ describe("jCustomUsageLimitSpend", () => {
     expect(spend.spentUsd).toBeCloseTo(110);
   });
 
+  it("shows a history shared by two chosen instances on both rows and counts it once", () => {
+    const spend = jCustomUsageLimitSpend(
+      "corp",
+      limit([
+        { environmentId: LAPTOP, instanceId: work },
+        { environmentId: LAPTOP, instanceId: personal },
+      ]),
+      new Map([
+        [
+          LAPTOP,
+          summary(
+            "laptop",
+            [{ dir: "/l/claude", instanceIds: [work, personal] }],
+            [bucket("2026-10-02", "/l/claude", 100, 2)],
+          ),
+        ],
+      ]),
+      NOW,
+    );
+    expect(spend.spentUsd).toBeCloseTo(110);
+    expect(spend.unpricedRecords).toBe(2);
+    expect(
+      spend.providers.map(({ spentUsd, sharedWith, sharedWithChosen }) => ({
+        spentUsd,
+        sharedWith,
+        sharedWithChosen,
+      })),
+    ).toEqual([
+      {
+        spentUsd: expect.closeTo(110),
+        sharedWith: [],
+        sharedWithChosen: [{ environmentId: LAPTOP, instanceId: personal }],
+      },
+      {
+        spentUsd: expect.closeTo(110),
+        sharedWith: [],
+        sharedWithChosen: [{ environmentId: LAPTOP, instanceId: work }],
+      },
+    ]);
+  });
+
   it("names instances outside the limit that share a chosen instance's history", () => {
     const spend = jCustomUsageLimitSpend(
       "corp",

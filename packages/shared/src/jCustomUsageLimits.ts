@@ -34,6 +34,11 @@ export interface JCustomUsageLimitProviderSpend {
   readonly hasHistory: boolean;
   /** Instances outside the limit that write to the same history, so their usage counts too. */
   readonly sharedWith: readonly ProviderInstanceId[];
+  /**
+   * Other providers of the limit that read the same history. Each row shows that spend in full,
+   * while the total counts it once.
+   */
+  readonly sharedWithChosen: readonly JCustomUsageLimitProvider[];
 }
 
 export interface JCustomUsageLimitSpend {
@@ -77,7 +82,13 @@ export function jCustomUsageLimitSpend(
   let listPriceUsd = 0;
   let unpricedRecords = 0;
 
-  const providers = limit.providers.map((provider): JCustomUsageLimitProviderSpend => {
+  // Which of the limit's providers read each source, by index into `limit.providers`.
+  const readers = new Map<string, number[]>();
+  const sourceKeysByProvider: string[][] = [];
+
+  const rows = limit.providers.map((provider, index) => {
+    const keys: string[] = [];
+    sourceKeysByProvider.push(keys);
     const summary = summaries.get(provider.environmentId) ?? null;
     if (summary === null) {
       missing.add(provider.environmentId);
@@ -102,8 +113,10 @@ export function jCustomUsageLimitSpend(
         if (!selected.has(instanceId)) sharedWith.add(instanceId);
       }
       const key = sourceKey(source);
-      if (counted.has(key)) continue;
-      counted.add(key);
+      keys.push(key);
+      readers.set(key, [...(readers.get(key) ?? []), index]);
+      let sourceSpent = 0;
+      let sourceUnpriced = 0;
       for (const bucket of summary.buckets) {
         if (
           bucket.provider !== source.fingerprint.provider ||
@@ -113,16 +126,32 @@ export function jCustomUsageLimitSpend(
         ) {
           continue;
         }
-        spent += bucket.costUsd;
-        unpricedRecords += bucket.unpricedRecords;
+        sourceSpent += bucket.costUsd;
+        sourceUnpriced += bucket.unpricedRecords;
       }
+      spent += sourceSpent;
+      if (counted.has(key)) continue;
+      counted.add(key);
+      listPriceUsd += sourceSpent;
+      unpricedRecords += sourceUnpriced;
     }
-    listPriceUsd += spent;
     return {
       provider,
       spentUsd: spent * multiplier,
       hasHistory: sources.length > 0,
       sharedWith: [...sharedWith],
+    };
+  });
+
+  const providers = rows.map((row, index): JCustomUsageLimitProviderSpend => {
+    const others = new Set(
+      (sourceKeysByProvider[index] ?? []).flatMap((key) =>
+        (readers.get(key) ?? []).filter((other) => other !== index),
+      ),
+    );
+    return {
+      ...row,
+      sharedWithChosen: [...others].flatMap((other) => limit.providers[other] ?? []),
     };
   });
 
