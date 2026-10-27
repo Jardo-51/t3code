@@ -41,7 +41,7 @@ function bucket(day: string, sourcePath: string, costUsd: number, unpricedRecord
 
 function summary(
   hostId: string,
-  sources: ReadonlyArray<{ readonly dir: string; readonly instanceIds: ProviderInstanceId[] }>,
+  sources: ReadonlyArray<{ readonly dir: string; readonly instanceIds?: ProviderInstanceId[] }>,
   buckets: readonly UsageBucket[],
 ): UsageSummary {
   return {
@@ -59,7 +59,7 @@ function summary(
       malformedRecords: 0,
       distinctSessions: 1,
       message: null,
-      jInstanceIds: instanceIds,
+      ...(instanceIds === undefined ? {} : { jInstanceIds: instanceIds }),
     })),
     pricing: { status: "fresh", source: "litellm", fetchedAt: null, knownModels: 1 },
     scanDurationMs: 1,
@@ -184,6 +184,35 @@ describe("jCustomUsageLimitSpend", () => {
       { spentUsd: 0, hasHistory: false },
       { spentUsd: null, hasHistory: false },
     ]);
+  });
+
+  it("leaves out environments that do not attribute usage to instances", () => {
+    const spend = jCustomUsageLimitSpend(
+      "corp",
+      limit([
+        { environmentId: LAPTOP, instanceId: work },
+        { environmentId: DESKTOP, instanceId: work },
+      ]),
+      new Map([
+        [
+          LAPTOP,
+          summary(
+            "laptop",
+            [{ dir: "/l/work", instanceIds: [work] }],
+            [bucket("2026-10-05", "/l/work", 100)],
+          ),
+        ],
+        [
+          DESKTOP,
+          summary("desktop", [{ dir: "/d/claude" }], [bucket("2026-10-05", "/d/claude", 40)]),
+        ],
+      ]),
+      NOW,
+    );
+    expect(spend.untrackedEnvironmentIds).toEqual([DESKTOP]);
+    expect(spend.missingEnvironmentIds).toEqual([]);
+    expect(spend.providers[1]).toMatchObject({ spentUsd: null, hasHistory: false });
+    expect(spend.spentUsd).toBeCloseTo(110);
   });
 
   it("caps the bar at a full limit while keeping the overspent amount", () => {

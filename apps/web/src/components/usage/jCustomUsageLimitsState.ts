@@ -1,11 +1,12 @@
-import type {
-  EnvironmentId,
-  JCustomUsageLimit,
-  JCustomUsageLimitId,
-  JCustomUsageLimitProvider,
-  ServerProvider,
-  UsageSummary,
-  UsageSummaryInput,
+import {
+  type EnvironmentId,
+  J_CUSTOM_USAGE_LIMIT_DRIVERS,
+  type JCustomUsageLimit,
+  type JCustomUsageLimitId,
+  type JCustomUsageLimitProvider,
+  type ServerProvider,
+  type UsageSummary,
+  type UsageSummaryInput,
 } from "@t3tools/contracts";
 import { resolveUsageAccess } from "@t3tools/client-runtime/state/usage-access";
 import * as Option from "effect/Option";
@@ -26,13 +27,16 @@ export interface JProviderOption {
   readonly name: string;
   readonly environmentLabel: string;
   readonly driver: ServerProvider["driver"];
+  /** Whether the environment's server attributes this instance's usage, so a limit can count it. */
+  readonly countable: boolean;
 }
 
-/** Every provider instance a limit can count, across the connected environments. */
+/** Every provider instance across the connected environments. */
 export const jProviderOptionsAtom = Atom.make((get): readonly JProviderOption[] =>
   [...get(environmentPresentations.presentationsWithProvidersAtom)].flatMap(
-    ([environmentId, presentation]) =>
-      (presentation.serverConfig?.providers ?? []).map((server) => {
+    ([environmentId, presentation]) => {
+      const attributes = presentation.serverConfig?.environment.capabilities.jCustomUsageLimits;
+      return (presentation.serverConfig?.providers ?? []).map((server) => {
         const provider = { environmentId, instanceId: server.instanceId };
         return {
           key: jProviderKey(provider),
@@ -41,8 +45,10 @@ export const jProviderOptionsAtom = Atom.make((get): readonly JProviderOption[] 
             server.displayName ?? providerClients.get(server.driver)?.label ?? server.instanceId,
           environmentLabel: presentation.entry.target.label,
           driver: server.driver,
+          countable: attributes === true && J_CUSTOM_USAGE_LIMIT_DRIVERS.has(server.driver),
         };
-      }),
+      });
+    },
   ),
 ).pipe(Atom.withLabel("web-j-custom-usage-limit-providers"));
 

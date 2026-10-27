@@ -25,9 +25,12 @@ export function jCustomUsageLimitMonth(now: number) {
 
 export interface JCustomUsageLimitProviderSpend {
   readonly provider: JCustomUsageLimitProvider;
-  /** Null while the provider's environment has not reported usage for this month. */
+  /**
+   * Null while the provider's environment has not reported usage for this month, or when it
+   * cannot attribute usage to instances.
+   */
   readonly spentUsd: number | null;
-  /** False when the environment reported, but no usage history is read for this instance. */
+  /** False when no usage source on the environment is attributed to this instance. */
   readonly hasHistory: boolean;
   /** Instances outside the limit that write to the same history, so their usage counts too. */
   readonly sharedWith: readonly ProviderInstanceId[];
@@ -39,6 +42,8 @@ export interface JCustomUsageLimitSpend {
   readonly unpricedRecords: number;
   readonly providers: readonly JCustomUsageLimitProviderSpend[];
   readonly missingEnvironmentIds: readonly EnvironmentId[];
+  /** Environments that reported, but attribute no usage to instances, such as upstream servers. */
+  readonly untrackedEnvironmentIds: readonly EnvironmentId[];
   /** The limit as a monthly window, so it shares pace and reset helpers with provider limits. */
   readonly window: ServerProviderUsageWindow;
 }
@@ -68,6 +73,7 @@ export function jCustomUsageLimitSpend(
   const multiplier = 1 + limit.markupPercent / 100;
   const counted = new Set<string>();
   const missing = new Set<EnvironmentId>();
+  const untracked = new Set<EnvironmentId>();
   let listPriceUsd = 0;
   let unpricedRecords = 0;
 
@@ -75,6 +81,10 @@ export function jCustomUsageLimitSpend(
     const summary = summaries.get(provider.environmentId) ?? null;
     if (summary === null) {
       missing.add(provider.environmentId);
+      return { provider, spentUsd: null, hasHistory: false, sharedWith: [] };
+    }
+    if (!summary.sources.some((source) => source.jInstanceIds !== undefined)) {
+      untracked.add(provider.environmentId);
       return { provider, spentUsd: null, hasHistory: false, sharedWith: [] };
     }
     const selected = new Set(
@@ -122,6 +132,7 @@ export function jCustomUsageLimitSpend(
     unpricedRecords,
     providers,
     missingEnvironmentIds: [...missing],
+    untrackedEnvironmentIds: [...untracked],
     window: {
       id,
       kind: "monthly",

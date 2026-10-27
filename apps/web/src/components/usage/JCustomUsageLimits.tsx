@@ -139,11 +139,18 @@ function JCustomUsageLimitCard({
         : `${environmentLabel(environmentId)} is not reporting usage, so its spend is missing.`,
     );
   }
+  for (const environmentId of spend.untrackedEnvironmentIds) {
+    notices.push(
+      `Usage isn't tracked per provider on ${environmentLabel(environmentId)}, so its spend is missing.`,
+    );
+  }
   for (const { provider, spentUsd, hasHistory, sharedWith } of spend.providers) {
     const key = jProviderKey(provider);
     const name = providerName(key, provider.instanceId);
     if (spentUsd !== null && !hasHistory) {
-      notices.push(`${name} has no usage history on ${environmentLabel(provider.environmentId)}.`);
+      notices.push(
+        `${name} has no usage this limit can count on ${environmentLabel(provider.environmentId)}.`,
+      );
     }
     if (sharedWith.length > 0) {
       const others = sharedWith

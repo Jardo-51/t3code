@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
-import { ProviderInstanceId } from "./providerInstance.ts";
+import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 
 /**
  * Fork-only: a monthly spending limit, such as a corporate API budget, drawn from the priced usage
@@ -32,3 +32,12 @@ export const JCustomUsageLimit = Schema.Struct({
   providers: Schema.Array(JCustomUsageLimitProvider),
 });
 export type JCustomUsageLimit = typeof JCustomUsageLimit.Type;
+
+/**
+ * Drivers whose usage the server can attribute to instances (`jInstanceIds`), because it reads
+ * each instance's own transcript folder. Scanned sources such as Cursor's belong to an account or
+ * a machine, so they cannot count towards a limit.
+ */
+export const J_CUSTOM_USAGE_LIMIT_DRIVERS: ReadonlySet<ProviderDriverKind> = new Set(
+  ["claudeAgent", "codex", "grok", "pi"].map((driver) => ProviderDriverKind.make(driver)),
+);

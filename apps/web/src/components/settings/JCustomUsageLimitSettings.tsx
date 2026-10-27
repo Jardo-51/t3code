@@ -162,10 +162,11 @@ function CustomLimitDialog({
     () => new Map((initial?.providers ?? []).map((provider) => [jProviderKey(provider), provider])),
   );
 
-  // Keep providers that are offline now, so editing a limit never drops them silently.
+  // Keep chosen providers that are offline or no longer countable, so editing a limit never
+  // drops them silently.
   const known = new Set(options.map((option) => option.key));
   const rows = [
-    ...options,
+    ...options.filter((option) => option.countable || selected.has(option.key)),
     ...[...selected]
       .filter(([key]) => !known.has(key))
       .map(([key, provider]) => ({
@@ -173,6 +174,7 @@ function CustomLimitDialog({
         provider,
         name: provider.instanceId,
         environmentLabel: "Not connected",
+        countable: true,
       })),
   ];
   const groups = new Map<EnvironmentId, { label: string; rows: typeof rows }>();
@@ -263,7 +265,7 @@ function CustomLimitDialog({
               <span className="text-sm font-medium text-foreground">Providers</span>
               {rows.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  No connected environment has providers.
+                  No connected environment has providers whose usage a limit can count.
                 </p>
               ) : (
                 <div className="divide-y divide-border/60 rounded-lg border border-input bg-muted/25">
@@ -286,6 +288,11 @@ function CustomLimitDialog({
                           <span className="min-w-0 truncate text-xs font-medium text-foreground">
                             {row.name}
                           </span>
+                          {row.countable ? null : (
+                            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                              Not counted
+                            </span>
+                          )}
                         </label>
                       ))}
                     </div>

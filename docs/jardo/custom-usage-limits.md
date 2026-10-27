@@ -19,6 +19,8 @@ environment is selected.
 
 ## Things to know
 
+- Claude, Codex, Grok and Pi providers can count towards a limit. The usage of OpenCode, Cursor and
+  Antigravity comes from an account or the whole machine rather than a provider, so they cannot.
 - Spend from an environment only counts while it is connected. The limit says which environments
   are missing.
 - Usage is attributed through each provider's history folder, so give the providers that count

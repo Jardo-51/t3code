@@ -13,6 +13,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import { mergeUsage } from "@t3tools/shared/usageMerge";
 import {
   EnvironmentId,
+  J_CUSTOM_USAGE_LIMIT_DRIVERS,
   ProviderDriverKind,
   ProviderInstanceId,
   UsageDay,
@@ -45,6 +46,7 @@ import * as CursorUsageAccounts from "@t3tools/provider-cursor/server/CursorUsag
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as AntigravityUsage from "../provider/Drivers/AntigravityUsage.ts";
+import { BUILT_IN_USAGE_DRIVERS } from "../provider/builtInDrivers.ts";
 import * as ProviderHostLive from "../provider/ProviderHostLive.ts";
 import { totalTokens, type UsageRecord } from "@t3tools/provider-core/server/usage";
 import * as UsageService from "./UsageService.ts";
@@ -1501,6 +1503,17 @@ describe("UsageService", () => {
       );
     }).pipe(Effect.scoped),
   );
+
+  it("attributes usage to instances for exactly the drivers custom limits offer", () => {
+    assert.deepStrictEqual(
+      new Set(
+        BUILT_IN_USAGE_DRIVERS.flatMap((driver) =>
+          driver.usage?.kind === "transcripts" ? [driver.driverKind] : [],
+        ),
+      ),
+      J_CUSTOM_USAGE_LIMIT_DRIVERS,
+    );
+  });
 
   it.live("names the provider instances that read each transcript directory", () =>
     Effect.gen(function* () {
