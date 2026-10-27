@@ -128,21 +128,25 @@ function JCustomUsageLimitCard({
   const [onlyDriver] = drivers;
   const color = drivers.size === 1 && onlyDriver ? barColor(onlyDriver) : "var(--foreground)";
   const providerName = (key: string, fallback: string) => providers.get(key)?.name ?? fallback;
+  // Only used mid-sentence, so the fallback starts lowercase.
   const environmentLabel = (environmentId: EnvironmentId) =>
-    statuses.get(environmentId)?.label ?? "An environment that is not connected";
+    statuses.get(environmentId)?.label ?? "an environment that is not connected";
 
-  const notices: string[] = [];
+  // Keyed by what they are about: two unknown environments share a label, so texts can repeat.
+  const notices: { readonly key: string; readonly text: string }[] = [];
   for (const environmentId of spend.missingEnvironmentIds) {
-    notices.push(
-      statuses.get(environmentId)?.isPending
+    notices.push({
+      key: `missing:${environmentId}`,
+      text: statuses.get(environmentId)?.isPending
         ? `Waiting for ${environmentLabel(environmentId)} to report usage.`
-        : `${environmentLabel(environmentId)} is not reporting usage, so its spend is missing.`,
-    );
+        : `Spend from ${environmentLabel(environmentId)} is missing, as it is not reporting usage.`,
+    });
   }
   for (const environmentId of spend.untrackedEnvironmentIds) {
-    notices.push(
-      `Usage isn't tracked per provider on ${environmentLabel(environmentId)}, so its spend is missing.`,
-    );
+    notices.push({
+      key: `untracked:${environmentId}`,
+      text: `Usage isn't tracked per provider on ${environmentLabel(environmentId)}, so its spend is missing.`,
+    });
   }
   const sharedGroups = new Set<string>();
   for (const { provider, sharedWithChosen } of spend.providers) {
@@ -160,17 +164,19 @@ function JCustomUsageLimitCard({
       const name = providerName(jProviderKey(member), member.instanceId);
       return acrossEnvironments ? `${name} on ${environmentLabel(member.environmentId)}` : name;
     });
-    notices.push(
-      `${new Intl.ListFormat("en").format(names)} read one history, so it counts once towards the total.`,
-    );
+    notices.push({
+      key: `chosen:${groupKey}`,
+      text: `${new Intl.ListFormat("en").format(names)} read one history, so it counts once towards the total.`,
+    });
   }
   for (const { provider, spentUsd, hasHistory, sharedWith } of spend.providers) {
     const key = jProviderKey(provider);
     const name = providerName(key, provider.instanceId);
     if (spentUsd !== null && !hasHistory) {
-      notices.push(
-        `${name} has no usage this limit can count on ${environmentLabel(provider.environmentId)}.`,
-      );
+      notices.push({
+        key: `history:${key}`,
+        text: `${name} has no usage this limit can count on ${environmentLabel(provider.environmentId)}.`,
+      });
     }
     if (sharedWith.length > 0) {
       const others = sharedWith
@@ -181,13 +187,17 @@ function JCustomUsageLimitCard({
           ),
         )
         .join(", ");
-      notices.push(`${name} shares its history with ${others}, so their usage counts too.`);
+      notices.push({
+        key: `shared:${key}`,
+        text: `${name} shares its history with ${others}, so their usage counts too.`,
+      });
     }
   }
   if (spend.unpricedRecords > 0) {
-    notices.push(
-      `${formatCount(spend.unpricedRecords)} request(s) used models without a known price and are not counted.`,
-    );
+    notices.push({
+      key: "unpriced",
+      text: `${formatCount(spend.unpricedRecords)} request(s) used models without a known price and are not counted.`,
+    });
   }
 
   return (
@@ -217,7 +227,7 @@ function JCustomUsageLimitCard({
             return (
               <span key={key} className="tabular-nums">
                 {providerName(key, provider.instanceId)} ·{" "}
-                {environmentLabel(provider.environmentId)}{" "}
+                {statuses.get(provider.environmentId)?.label ?? "Not connected"}{" "}
                 <span className="text-foreground">
                   {spentUsd === null ? "—" : formatUsd(spentUsd)}
                 </span>
@@ -226,8 +236,8 @@ function JCustomUsageLimitCard({
           })}
         </span>
         {notices.map((notice) => (
-          <span key={notice} className="text-warning-foreground">
-            {notice}
+          <span key={notice.key} className="text-warning-foreground">
+            {notice.text}
           </span>
         ))}
       </div>
