@@ -1502,6 +1502,59 @@ describe("UsageService", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.live("names the provider instances that read each transcript directory", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      const workHome = NodePath.join(home, "claude-work");
+      yield* Effect.promise(async () => {
+        await NodeFSP.writeFile(transcript, claudeLine(1, 5));
+        await NodeFSP.mkdir(NodePath.join(workHome, "projects"), { recursive: true });
+        await NodeFSP.writeFile(
+          NodePath.join(workHome, "projects", "session.jsonl"),
+          claudeLine(2, 7),
+        );
+      });
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(
+          layerService({
+            prefix: "usage-service-instance-ids-test",
+            home,
+            settings: {
+              ...settings,
+              providerInstances: {
+                ...settings.providerInstances,
+                [ProviderInstanceId.make("claude-work")]: {
+                  driver: ProviderDriverKind.make("claudeAgent"),
+                  config: { homePath: workHome },
+                },
+                [ProviderInstanceId.make("claude-shared")]: {
+                  driver: ProviderDriverKind.make("claudeAgent"),
+                  config: { homePath: NodePath.join(home, "claude") },
+                },
+              },
+            },
+          }),
+        ),
+      );
+      const summary = yield* service.readSummary(WINDOW);
+      const instancesByDir = new Map(
+        summary.sources
+          .filter((source) => source.fingerprint.provider === "claude")
+          .map((source) => [
+            NodePath.basename(NodePath.dirname(source.fingerprint.resolvedHomePath)),
+            source.jInstanceIds?.join(","),
+          ]),
+      );
+      assert.deepStrictEqual(
+        instancesByDir,
+        new Map([
+          ["claude", "claudeAgent,claude-shared"],
+          ["claude-work", "claude-work"],
+        ]),
+      );
+    }).pipe(Effect.scoped),
+  );
+
   it.live(
     "uses explicit account settings before environment and default homes, then refreshes them",
     () =>

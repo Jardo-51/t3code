@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2-jardo.1] - Unreleased
 
+### Added
+
+- [#18](https://github.com/Jardo-51/t3code/issues/18) Custom usage limits: a monthly USD limit with a markup, counting the spend of chosen providers across environments, shown on the Limits tab. See [docs](custom-usage-limits.md).
+
 ## [0.1.1-nightly.20261017.3238-jardo.1] - 2026-10-23
 
 Version with Orchestrator V2.

@@ -20,6 +20,7 @@ import {
   TrimmedString,
 } from "./baseSchemas.ts";
 import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
+import { JCustomUsageLimit, JCustomUsageLimitId } from "./jCustomUsageLimits.ts";
 import { EnvironmentMachineKind, ThreadEnvMode, WorktreeSubmodules } from "./environment.ts";
 import { KeybindingShortcut } from "./keybindings.ts";
 import {
@@ -1317,6 +1318,10 @@ export const ServerSettings = Schema.Struct({
   usageModelAliases: Schema.Record(TrimmedNonEmptyString, TrimmedNonEmptyString).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+
+  jCustomUsageLimits: Schema.Record(JCustomUsageLimitId, JCustomUsageLimit).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -1637,6 +1642,11 @@ export const ServerSettingsPatch = Schema.Struct({
 
   usageModelAliases: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, Schema.NullOr(TrimmedNonEmptyString)),
+  ),
+
+  // Per entry like `usageLimitSources`; `null` removes a limit.
+  jCustomUsageLimits: Schema.optionalKey(
+    Schema.Record(JCustomUsageLimitId, Schema.NullOr(JCustomUsageLimit)),
   ),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;

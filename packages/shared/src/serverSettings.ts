@@ -400,6 +400,7 @@ export function applyServerSettingsPatch(
     sourceControlHosts: sourceControlHostsPatch,
     usagePriceOverrides: usagePriceOverridesPatch,
     usageModelAliases: usageModelAliasesPatch,
+    jCustomUsageLimits: jCustomUsageLimitsPatch,
     // Entry replacement: deepMerge would keep keys the client meant to clear.
     projectSettingsOverrides: projectSettingsOverridesPatch,
     projectAgentBrowserAccessOverrides: _legacyBrowserAccess,
@@ -598,6 +599,14 @@ export function applyServerSettingsPatch(
           usageModelAliases: mergeSettingsEntries(
             current.usageModelAliases,
             usageModelAliasesPatch,
+          ),
+        }
+      : {}),
+    ...(jCustomUsageLimitsPatch !== undefined
+      ? {
+          jCustomUsageLimits: mergeSettingsEntries(
+            current.jCustomUsageLimits,
+            jCustomUsageLimitsPatch,
           ),
         }
       : {}),

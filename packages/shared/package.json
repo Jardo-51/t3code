@@ -255,6 +255,10 @@
       "types": "./src/jThreadTickets.ts",
       "import": "./src/jThreadTickets.ts"
     },
+    "./jCustomUsageLimits": {
+      "types": "./src/jCustomUsageLimits.ts",
+      "import": "./src/jCustomUsageLimits.ts"
+    },
     "./composerTrigger": {
       "types": "./src/composerTrigger.ts",
       "import": "./src/composerTrigger.ts"

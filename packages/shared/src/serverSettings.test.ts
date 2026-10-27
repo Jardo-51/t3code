@@ -2,6 +2,8 @@ import {
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
   ProviderDriverKind,
+  EnvironmentId,
+  JCustomUsageLimitId,
   ProviderInstanceId,
   UsageLimitSourceId,
   type ServerProvider,
@@ -549,6 +551,32 @@ describe("serverSettings helpers", () => {
 
     const removed = applyServerSettingsPatch(added, { usageLimitSources: { [hubA]: null } });
     expect(Object.keys(removed.usageLimitSources)).toEqual([hubB]);
+  });
+
+  it("upserts and removes custom usage limits per entry", () => {
+    const corp = JCustomUsageLimitId.make("corp");
+    const team = JCustomUsageLimitId.make("team");
+    const limit = (limitUsd: number) => ({
+      name: "Corporate API",
+      limitUsd,
+      markupPercent: 10,
+      providers: [
+        {
+          environmentId: EnvironmentId.make("laptop"),
+          instanceId: ProviderInstanceId.make("claude-work"),
+        },
+      ],
+    });
+    const current = { ...DEFAULT_SERVER_SETTINGS, jCustomUsageLimits: { [corp]: limit(1000) } };
+
+    const added = applyServerSettingsPatch(current, { jCustomUsageLimits: { [team]: limit(50) } });
+    expect(Object.keys(added.jCustomUsageLimits)).toEqual([corp, team]);
+
+    const edited = applyServerSettingsPatch(added, { jCustomUsageLimits: { [corp]: limit(2000) } });
+    expect(edited.jCustomUsageLimits[corp]?.limitUsd).toBe(2000);
+
+    const removed = applyServerSettingsPatch(edited, { jCustomUsageLimits: { [corp]: null } });
+    expect(Object.keys(removed.jCustomUsageLimits)).toEqual([team]);
   });
 
   it("replaces and removes individual usage prices without clobbering other models", () => {
