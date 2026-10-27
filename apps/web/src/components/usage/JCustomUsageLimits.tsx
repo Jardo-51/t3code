@@ -1,5 +1,6 @@
 import type { EnvironmentId, UsageSummaryInput } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
+import { refreshUsage } from "@t3tools/client-runtime/state/usage";
 import {
   jCustomUsageLimitMonth,
   jCustomUsageLimitSpend,
@@ -8,8 +9,12 @@ import {
 import { formatCount, formatUsd } from "@t3tools/shared/usageFormat";
 import { paceOf } from "@t3tools/shared/usageLimits";
 import { WalletIcon } from "lucide-react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
+import { appAtomRegistry } from "../../rpc/atomRegistry";
+import { environmentPresentations } from "../../state/presentation";
+import { serverEnvironment } from "../../state/server";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { PaceIcon, WindowBar, barColor } from "./UsageLimits";
 import {
@@ -58,6 +63,23 @@ function JCustomUsageLimitCards({
     jCustomUsageMonthAtom(jCustomUsageMonthKey(input, environmentIds)),
   );
   const options = useAtomValue(jProviderOptionsAtom);
+  const refreshMonth = useEffectEvent(() => {
+    void refreshUsage({
+      registry: appAtomRegistry,
+      server: serverEnvironment,
+      presentations: environmentPresentations,
+      environmentIds: environments
+        .filter((environment) => environment.canReadDiagnostics)
+        .map(({ environmentId }) => environmentId),
+      input,
+    });
+  });
+  // The page advances `now` on refresh. The month summary stays cached for a minute, so without
+  // this the spend would lag behind the refreshed pace and reset text.
+  const mountedNow = useRef(now);
+  useEffect(() => {
+    if (now !== mountedNow.current) refreshMonth();
+  }, [now]);
   const statuses = new Map(environments.map((status) => [status.environmentId, status]));
   const summaries = new Map(environments.map((status) => [status.environmentId, status.summary]));
   const providers = new Map(options.map((option) => [option.key, option]));
