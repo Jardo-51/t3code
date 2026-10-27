@@ -38,7 +38,6 @@ import {
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { JCustomUsageLimitsSection } from "./JCustomUsageLimits";
 import { UsageLimitsPooled } from "./UsageLimitsPooled";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
@@ -405,10 +404,5 @@ export function UsageLimitsSection({
       ];
     }),
   );
-  return (
-    <div className="flex flex-col gap-8">
-      <JCustomUsageLimitsSection selectedEnvironmentIds={selectedEnvironmentIds} now={now} />
-      <UsageLimitsPooled presentations={selected} now={now} cursorPrompt={cursorPrompt} />
-    </div>
-  );
+  return <UsageLimitsPooled presentations={selected} now={now} cursorPrompt={cursorPrompt} />;
 }
