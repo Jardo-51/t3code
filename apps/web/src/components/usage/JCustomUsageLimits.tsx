@@ -10,20 +10,22 @@ import { paceOf } from "@t3tools/shared/usageLimits";
 import { WalletIcon } from "lucide-react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
-import { type EnvironmentUsageStatus, useUsage } from "../../state/usage";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { PaceIcon, WindowBar, barColor } from "./UsageLimits";
 import {
   type JProviderOption,
+  type JEnvironmentMonthUsage,
   type JStoredCustomUsageLimit,
   jCustomUsageLimitsAtom,
+  jCustomUsageMonthAtom,
+  jCustomUsageMonthKey,
   jProviderKey,
   jProviderOptionsAtom,
 } from "./jCustomUsageLimitsState";
 
 /**
- * Limits saved on the selected environments. Spend comes from every connected environment, since
- * a limit's providers can live on machines the filter leaves out.
+ * Limits saved on the selected environments. Spend comes from every environment the limits count,
+ * since a limit's providers can live on machines the filter leaves out.
  */
 export function JCustomUsageLimitsSection({
   selectedEnvironmentIds,
@@ -48,10 +50,13 @@ function JCustomUsageLimitCards({
   readonly now: number;
 }) {
   const { sinceDay, untilDay } = jCustomUsageLimitMonth(now);
-  // `useUsage` compares the window by identity; the React Compiler keeps it across renders with
-  // the same `now`.
   const input: UsageSummaryInput = { sinceDay, untilDay, timeZone: "UTC" };
-  const { environments } = useUsage(input);
+  const environmentIds = limits.flatMap((entry) =>
+    entry.limit.providers.map((provider) => provider.environmentId),
+  );
+  const environments = useAtomValue(
+    jCustomUsageMonthAtom(jCustomUsageMonthKey(input, environmentIds)),
+  );
   const options = useAtomValue(jProviderOptionsAtom);
   const statuses = new Map(environments.map((status) => [status.environmentId, status]));
   const summaries = new Map(environments.map((status) => [status.environmentId, status.summary]));
@@ -88,7 +93,7 @@ function JCustomUsageLimitCard({
 }: {
   readonly entry: JStoredCustomUsageLimit;
   readonly spend: JCustomUsageLimitSpend;
-  readonly statuses: ReadonlyMap<EnvironmentId, EnvironmentUsageStatus>;
+  readonly statuses: ReadonlyMap<EnvironmentId, JEnvironmentMonthUsage>;
   readonly providers: ReadonlyMap<string, JProviderOption>;
   readonly now: number;
 }) {

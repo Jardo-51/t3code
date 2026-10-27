@@ -4,11 +4,16 @@ import type {
   JCustomUsageLimitId,
   JCustomUsageLimitProvider,
   ServerProvider,
+  UsageSummary,
+  UsageSummaryInput,
 } from "@t3tools/contracts";
-import { Atom } from "effect/reactivity";
+import { resolveUsageAccess } from "@t3tools/client-runtime/state/usage-access";
+import * as Option from "effect/Option";
+import { AsyncResult, Atom } from "effect/reactivity";
 
 import { environmentPresentations } from "../../state/presentation";
 import { serverEnvironment } from "../../state/server";
+import { environmentSession } from "../../state/session";
 import { providerClients } from "../settings/providerDriverMeta";
 
 export function jProviderKey(provider: JCustomUsageLimitProvider): string {
@@ -65,3 +70,68 @@ export const jCustomUsageLimitsAtom = Atom.make((get): readonly JStoredCustomUsa
     },
   ),
 ).pipe(Atom.withLabel("web-j-custom-usage-limits"));
+
+export interface JEnvironmentMonthUsage {
+  readonly environmentId: EnvironmentId;
+  /** Null when this client does not know the environment. */
+  readonly label: string | null;
+  readonly isPending: boolean;
+  readonly canReadDiagnostics: boolean;
+  readonly summary: UsageSummary | null;
+}
+
+export function jCustomUsageMonthKey(
+  input: UsageSummaryInput,
+  environmentIds: readonly EnvironmentId[],
+): string {
+  return JSON.stringify({ input, environmentIds: [...new Set(environmentIds)].toSorted() });
+}
+
+/**
+ * Usage of only the environments a limit counts. `useUsage` would scan every connected
+ * environment for this window, and a cold scan takes seconds per machine.
+ */
+export const jCustomUsageMonthAtom = Atom.family((key: string) =>
+  Atom.make((get): readonly JEnvironmentMonthUsage[] => {
+    const { input, environmentIds } = JSON.parse(key) as {
+      readonly input: UsageSummaryInput;
+      readonly environmentIds: readonly EnvironmentId[];
+    };
+    return environmentIds.map((environmentId): JEnvironmentMonthUsage => {
+      const presentation = get(environmentPresentations.presentationAtom(environmentId));
+      if (presentation === null) {
+        return {
+          environmentId,
+          label: null,
+          isPending: false,
+          canReadDiagnostics: false,
+          summary: null,
+        };
+      }
+      const label = presentation.entry.target.label;
+      const sessionResult = get(environmentSession.sessionStateAtom(environmentId));
+      const access = resolveUsageAccess({
+        connectionPhase: presentation.connection.phase,
+        session: Option.getOrNull(AsyncResult.value(sessionResult)),
+        hasSessionError: sessionResult._tag === "Failure",
+      });
+      if (!access.canReadDiagnostics) {
+        return {
+          environmentId,
+          label,
+          isPending: access.isPending,
+          canReadDiagnostics: false,
+          summary: null,
+        };
+      }
+      const result = get(serverEnvironment.usageSummary({ environmentId, input }));
+      return {
+        environmentId,
+        label,
+        isPending: result.waiting,
+        canReadDiagnostics: true,
+        summary: Option.getOrNull(AsyncResult.value(result)),
+      };
+    });
+  }).pipe(Atom.withLabel(`web-j-custom-usage-month:${key}`)),
+);
