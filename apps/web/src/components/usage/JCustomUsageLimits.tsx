@@ -122,6 +122,8 @@ function JCustomUsageLimitCard({
   const timestampFormat = usePrimarySettings((settings) => settings.timestampFormat);
   const { limit } = entry;
   const pace = paceOf(spend.window, now);
+  // Until a provider reports, a $0.00 total and its pace would read as nothing spent.
+  const reported = spend.providers.some(({ spentUsd }) => spentUsd !== null);
   const drivers = new Set(
     limit.providers.flatMap((provider) => providers.get(jProviderKey(provider))?.driver ?? []),
   );
@@ -206,11 +208,11 @@ function JCustomUsageLimitCard({
         <span className="text-sm font-medium text-foreground">{limit.name}</span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="text-3xl font-semibold text-foreground tabular-nums">
-            {formatUsd(spend.spentUsd)}
+            {reported ? formatUsd(spend.spentUsd) : "—"}
           </span>
           <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <span>of {formatUsd(limit.limitUsd)}</span>
-            {pace ? <PaceIcon pace={pace} /> : null}
+            {reported && pace ? <PaceIcon pace={pace} /> : null}
           </span>
         </span>
       </div>
