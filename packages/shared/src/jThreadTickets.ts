@@ -1,4 +1,4 @@
-import { type JThreadTicket, JThreadTicketUrl } from "@t3tools/contracts";
+import { JThreadTicketUrl } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -53,10 +53,4 @@ function safeDecode(value: string): string {
   } catch {
     return value;
   }
-}
-
-export function jThreadTicketSearchTerms(thread: {
-  readonly jTickets?: ReadonlyArray<JThreadTicket> | undefined;
-}): string[] {
-  return (thread.jTickets ?? []).flatMap((ticket) => [ticket.key, ticket.url]);
 }

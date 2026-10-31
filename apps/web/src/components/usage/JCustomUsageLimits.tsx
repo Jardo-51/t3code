@@ -185,7 +185,7 @@ function JCustomUsageLimitCard({
         <span className="text-sm font-medium text-foreground">{limit.name}</span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="text-3xl font-semibold text-foreground tabular-nums">
-            {reported ? formatUsd(spend.spentUsd) : "—"}
+            {reported ? formatUsd(spend.spentUsd) : "-"}
           </span>
           <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <span>of {formatUsd(limit.limitUsd)}</span>
@@ -208,7 +208,7 @@ function JCustomUsageLimitCard({
                 {providerName(key, provider.instanceId)} ·{" "}
                 {statuses.get(provider.environmentId)?.label ?? "Not connected"}{" "}
                 <span className="text-foreground">
-                  {spentUsd === null ? "—" : formatUsd(spentUsd)}
+                  {spentUsd === null ? "-" : formatUsd(spentUsd)}
                 </span>
               </span>
             );

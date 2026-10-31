@@ -70,6 +70,7 @@ function JThreadTicketsDialog({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- moves DOM focus to the URL input once the dialog has painted
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => urlInputRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);

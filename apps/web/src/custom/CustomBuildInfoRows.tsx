@@ -36,7 +36,7 @@ export function CustomBuildInfoRows() {
               {refTypeLabel} <code className="text-foreground/80">{buildInfo.refName}</code>
               {buildInfo.dirty ? " with uncommitted changes" : ""}
             </span>
-            <code className="break-all text-[11px] text-foreground/80">{buildInfo.commitSha}</code>
+            <code className="break-all text-2xs text-foreground/80">{buildInfo.commitSha}</code>
           </span>
         }
       />

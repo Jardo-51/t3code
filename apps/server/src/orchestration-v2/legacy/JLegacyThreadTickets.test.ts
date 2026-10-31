@@ -175,7 +175,7 @@ it.layer(layerTest)("JLegacyThreadTickets", (it) => {
       );
       yield* importer.reconcileShells;
       yield* importer.ensureTranscript(threadId);
-      yield* maintenance.compactEventStore;
+      yield* maintenance.compactEventStore();
 
       const remaining = yield* sql<{ readonly count: number }>`
         SELECT COUNT(*) AS count FROM orchestration_events

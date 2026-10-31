@@ -1,7 +1,7 @@
 import type { EnvironmentId, JThreadTicket, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { TicketIcon } from "lucide-react";
-import { type MouseEvent, type ReactNode, useMemo } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 import { ComposerControl } from "~/components/chat/ComposerControl";
 import { InlineButton } from "~/components/ui/button";
@@ -71,7 +71,14 @@ export function JSidebarThreadBadges({
   );
 }
 
-export function JSidebarTicketBadge({ thread }: { readonly thread: SidebarThread }) {
+/** Whether `JSidebarThreadBadges` renders anything, so a row can drop an otherwise empty line. */
+export function useJSidebarThreadHasBadges(thread: SidebarThread, hasPrBadge: boolean): boolean {
+  const showPullRequests = useClientSettings((settings) => settings.jSidebarShowPullRequests);
+  const showTickets = useClientSettings((settings) => settings.jSidebarShowTickets);
+  return (showPullRequests && hasPrBadge) || (showTickets && (thread.jTickets?.length ?? 0) > 0);
+}
+
+function JSidebarTicketBadge({ thread }: { readonly thread: SidebarThread }) {
   const showTickets = useClientSettings((settings) => settings.jSidebarShowTickets);
   const tickets = thread.jTickets ?? [];
   if (!showTickets || tickets.length === 0) return null;
@@ -86,10 +93,7 @@ function TicketBadge({
   readonly thread: SidebarThread;
   readonly tickets: ReadonlyArray<JThreadTicket>;
 }) {
-  const threadRef = useMemo(
-    () => scopeThreadRef(thread.environmentId, thread.id),
-    [thread.environmentId, thread.id],
-  );
+  const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const openTicket = useOpenTicketLink(threadRef);
   const first = tickets[0]!;
   return (

@@ -1,17 +1,7 @@
 /**
- * Fork-only migration track, run by the SQLite persistence layer right after
- * `runMigrations`.
- *
- * Effect's Migrator records only the highest applied ID and skips anything at
- * or below it, so fork migrations cannot share upstream's list without either
- * colliding with upstream's next ID or hiding every later upstream migration.
- * This track keeps its own numbering (starting at 1) and its own tracking table
- * (`j_sql_migrations`), so neither high-water mark can hide the other's
- * migrations. See "Custom database migrations" in docs/jardo/forking-strategy.md
- * for the rules fork migrations follow.
- *
- * Add migrations as `./JardoForkMigrations/NNN_Name.ts`, statically imported and
- * listed in `migrationEntries` like `Migrations.ts` does.
+ * Fork-only migrations with their own numbering and `j_sql_migrations` table: Effect's Migrator
+ * skips every ID at or below the highest applied one, so a shared list would hide migrations.
+ * Rules: "Custom database migrations" in docs/jardo/forking-strategy.md.
  */
 
 import * as Migrator from "effect/sql/Migrator";
@@ -21,7 +11,7 @@ import type { SqlError } from "effect/sql/SqlError";
 
 import Migration0001 from "./JardoForkMigrations/001_ProjectionThreadTickets.ts";
 
-export const JARDO_FORK_MIGRATIONS_TABLE = "j_sql_migrations";
+const JARDO_FORK_MIGRATIONS_TABLE = "j_sql_migrations";
 
 export type JardoForkMigrationEntry = readonly [
   id: number,

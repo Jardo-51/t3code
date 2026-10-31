@@ -11,7 +11,7 @@ export type JThreadTicketCommand = Extract<
   { readonly type: "thread.j-ticket.link" | "thread.j-ticket.unlink" }
 >;
 
-export function jThreadTicketsOf(
+function jThreadTicketsOf(
   thread: Pick<OrchestrationV2AppThread, "jTickets">,
 ): ReadonlyArray<JThreadTicket> {
   return thread.jTickets ?? [];
