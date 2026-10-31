@@ -84,6 +84,8 @@ import {
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { UsageLimitsSection } from "./UsageLimits";
+import { JCustomUsageLimitsSection } from "./JCustomUsageLimits";
+import { refreshJCustomUsageMonth } from "./jCustomUsageLimitsState";
 import { UsagePriceOverrides } from "./UsagePriceOverrides";
 import { UsageProviderChart } from "./UsageProviderChart";
 import { SpeedPremium, UsageModelDialog } from "./UsageModelDialog";
@@ -307,7 +309,10 @@ export function UsagePage() {
     if (showingLimits) {
       refreshingRef.current = true;
       setIsRefreshing(true);
-      void refreshLimits().finally(() => {
+      void Promise.all([
+        refreshLimits(),
+        refreshJCustomUsageMonth(selectedEnvironmentIds, Date.now()),
+      ]).finally(() => {
         refreshingRef.current = false;
         setIsRefreshing(false);
       });
@@ -520,22 +525,28 @@ export function UsagePage() {
                   : `Select an environment to see ${showingLimits ? "limits" : "usage"}.`}
               </p>
             ) : showingLimits ? (
-              <UsageLimitsSection
-                selectedEnvironmentIds={selectedEnvironmentIds}
-                hiddenProviders={hiddenProviders}
-                now={limitsNow}
-                cursorPrompt={
-                  cursorAccessEnvironments.length > 0 ? (
-                    <CursorEnableLimits
-                      environments={cursorAccessEnvironments}
-                      onEnabled={() => {
-                        void refresh();
-                        void refreshLimits(false, true);
-                      }}
-                    />
-                  ) : null
-                }
-              />
+              <div className="flex flex-col gap-8">
+                <JCustomUsageLimitsSection
+                  selectedEnvironmentIds={selectedEnvironmentIds}
+                  now={limitsNow}
+                />
+                <UsageLimitsSection
+                  selectedEnvironmentIds={selectedEnvironmentIds}
+                  hiddenProviders={hiddenProviders}
+                  now={limitsNow}
+                  cursorPrompt={
+                    cursorAccessEnvironments.length > 0 ? (
+                      <CursorEnableLimits
+                        environments={cursorAccessEnvironments}
+                        onEnabled={() => {
+                          void refresh();
+                          void refreshLimits(false, true);
+                        }}
+                      />
+                    ) : null
+                  }
+                />
+              </div>
             ) : shown === null ? (
               <UsageSkeleton />
             ) : !canReadDiagnostics ? (

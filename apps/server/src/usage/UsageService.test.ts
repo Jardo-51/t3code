@@ -13,6 +13,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 import { mergeUsage } from "@t3tools/shared/usageMerge";
 import {
   EnvironmentId,
+  J_CUSTOM_USAGE_LIMIT_DRIVERS,
   ProviderDriverKind,
   ProviderInstanceId,
   UsageDay,
@@ -45,6 +46,7 @@ import * as CursorUsageAccounts from "@t3tools/provider-cursor/server/CursorUsag
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as AntigravityUsage from "../provider/Drivers/AntigravityUsage.ts";
+import { BUILT_IN_USAGE_DRIVERS } from "../provider/builtInDrivers.ts";
 import * as ProviderHostLive from "../provider/ProviderHostLive.ts";
 import { totalTokens, type UsageRecord } from "@t3tools/provider-core/server/usage";
 import * as UsageService from "./UsageService.ts";
@@ -1498,6 +1500,70 @@ describe("UsageService", () => {
       assert.strictEqual(
         sources.filter((source) => source.fingerprint.provider === "codex").length,
         1,
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it("attributes usage to instances for exactly the drivers custom limits offer", () => {
+    assert.deepStrictEqual(
+      new Set(
+        BUILT_IN_USAGE_DRIVERS.flatMap((driver) =>
+          driver.usage?.kind === "transcripts" ? [driver.driverKind] : [],
+        ),
+      ),
+      J_CUSTOM_USAGE_LIMIT_DRIVERS,
+    );
+  });
+
+  it.live("names the provider instances that read each transcript directory", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      const workHome = NodePath.join(home, "claude-work");
+      yield* Effect.promise(async () => {
+        await NodeFSP.writeFile(transcript, claudeLine(1, 5));
+        await NodeFSP.mkdir(NodePath.join(workHome, "projects"), { recursive: true });
+        await NodeFSP.writeFile(
+          NodePath.join(workHome, "projects", "session.jsonl"),
+          claudeLine(2, 7),
+        );
+      });
+      const service = yield* UsageService.make.pipe(
+        Effect.provide(
+          layerService({
+            prefix: "usage-service-instance-ids-test",
+            home,
+            settings: {
+              ...settings,
+              providerInstances: {
+                ...settings.providerInstances,
+                [ProviderInstanceId.make("claude-work")]: {
+                  driver: ProviderDriverKind.make("claudeAgent"),
+                  config: { homePath: workHome },
+                },
+                [ProviderInstanceId.make("claude-shared")]: {
+                  driver: ProviderDriverKind.make("claudeAgent"),
+                  config: { homePath: NodePath.join(home, "claude") },
+                },
+              },
+            },
+          }),
+        ),
+      );
+      const summary = yield* service.readSummary(WINDOW);
+      const instancesByDir = new Map(
+        summary.sources
+          .filter((source) => source.fingerprint.provider === "claude")
+          .map((source) => [
+            NodePath.basename(NodePath.dirname(source.fingerprint.resolvedHomePath)),
+            source.jInstanceIds?.join(","),
+          ]),
+      );
+      assert.deepStrictEqual(
+        instancesByDir,
+        new Map([
+          ["claude", "claudeAgent,claude-shared"],
+          ["claude-work", "claude-work"],
+        ]),
       );
     }).pipe(Effect.scoped),
   );

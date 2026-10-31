@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 
 import { ForwardCompatibleArray, NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { ProviderInstanceId } from "./providerInstance.ts";
 
 /**
  * Bumped whenever the shape of {@link UsageSummary} changes incompatibly.
@@ -115,6 +116,12 @@ export const UsageSource = Schema.Struct({
    * get the refreshed source.
    */
   refreshing: Schema.optionalKey(Schema.Literal(true)),
+  /**
+   * Fork-only: the provider instances whose transcripts this source reads. Several instances can
+   * share one directory, so their usage cannot be told apart. Absent where the server does not
+   * map sources to instances.
+   */
+  jInstanceIds: Schema.optionalKey(Schema.Array(ProviderInstanceId)),
 });
 export type UsageSource = typeof UsageSource.Type;
 

@@ -669,6 +669,15 @@ export const SETTINGS_SEARCH_ITEMS = [
     providerSettingsOnly: true,
   },
   {
+    id: "custom-usage-limits",
+    title: "Custom usage limits",
+    to: "/settings/providers",
+    searchTerms: [
+      "usage limits budget monthly spend dollars USD corporate API endpoint markup cost cap",
+    ],
+    providerSettingsOnly: true,
+  },
+  {
     id: "cursor-keychain-usage",
     title: "Cursor account usage",
     to: "/settings/providers",

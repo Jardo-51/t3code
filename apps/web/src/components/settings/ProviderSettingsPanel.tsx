@@ -99,6 +99,7 @@ import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { ExpandableText } from "./ExpandableText";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { UsageProviderSettings } from "./UsageProviderSettings";
+import { JCustomUsageLimitSettings } from "./JCustomUsageLimitSettings";
 import { ProviderSetupSection, readAntigravityAuthMethod } from "./ProviderSetupSection";
 import { ProviderAuthenticationSection } from "./ProviderAuthenticationSection";
 import { CodexSetupSection, CodexManagedRuntimeFields } from "./CodexSetupSection";
@@ -358,7 +359,8 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
     } else if (
       !target.scoped &&
       (searchTargetId === searchableSetting("provider-health-check-interval").id ||
-        searchTargetId === searchableSetting("usage-providers").id) &&
+        searchTargetId === searchableSetting("usage-providers").id ||
+        searchTargetId === searchableSetting("custom-usage-limits").id) &&
       !selectedEnvironmentCanRenderSettings &&
       searchableEnvironmentId !== undefined
     ) {
@@ -1101,6 +1103,14 @@ export function EnvironmentProviderSettings({
         environmentLabel={environmentLabel}
         sources={settings.usageLimitSources}
         cursorKeychainUsageEnabled={settings.cursorKeychainUsageEnabled}
+        readOnly={readOnly}
+      />
+
+      <JCustomUsageLimitSettings
+        key={`custom-limits:${environmentId}`}
+        environmentId={environmentId}
+        environmentLabel={environmentLabel}
+        limits={settings.jCustomUsageLimits}
         readOnly={readOnly}
       />
 
