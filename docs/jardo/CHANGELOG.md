@@ -5,6 +5,13 @@ All notable changes against the [upstream repo](https://github.com/pingdotgg/t3c
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6-jardo.1] - Unreleased
+
+### Changed
+
+- [#11](https://github.com/Jardo-51/t3code/issues/11) Ticket keys and URLs are matched by upstream's new ranked thread search in the sidebar and command palette; a result found by its ticket says so.
+- One-line sidebar rows keep their pull request and ticket badges, which upstream dropped from one-line rows. The **Pull requests in sidebar** and **Tickets in sidebar** toggles now sit in the Sidebar section of Settings → General.
+
 ## [0.1.2-jardo.1] - 2026-10-31
 
 ### Added
