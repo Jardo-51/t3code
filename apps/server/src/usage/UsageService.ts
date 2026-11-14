@@ -39,7 +39,7 @@ import type {
   TranscriptUsageFormat,
   UsageRecord,
 } from "@t3tools/provider-core/server/usage";
-import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
+import { canonicalModelFilter, resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
 import { createOverrideRateTable, parseRateTable, type RateTable } from "./usagePricing.ts";
 import {
   listTranscriptFiles,
@@ -71,6 +71,7 @@ const MTIME_SLACK_MS = 36 * 60 * 60 * 1000;
 const MAX_HOURLY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const CACHE_RETENTION_DAYS = 92;
+const STALE_TEMP_DIRECTORY_MS = 60 * 60 * 1000;
 
 const TRANSCRIPT_READ_CONCURRENCY = 4;
 
@@ -173,7 +174,7 @@ export const make = Effect.gen(function* () {
 
   const ratesCachePath = path.join(config.stateDir, "usage-model-rates.json");
   const scanCachePath = path.join(config.stateDir, SCAN_CACHE_FILE_NAME);
-  const writeCacheFile = (filePath: string, contents: string) =>
+  const writeCacheFile = (filePath: string, contents: string | Iterable<string>) =>
     writeFileStringAtomically({ filePath, contents }).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
@@ -417,6 +418,32 @@ export const make = Effect.gen(function* () {
   // Serialize writes so concurrently finished window scans cannot overwrite newer snapshots.
   const persistLock = yield* Semaphore.make(1);
 
+  // The saved cache supersedes older versions. Temp folders an aborted write left behind are
+  // removed once idle for an hour, so a write in progress from another server survives.
+  let supersededFilesRemoved = false;
+  const removeSupersededCacheFiles = Effect.gen(function* () {
+    for (const fileName of LEGACY_SCAN_CACHE_FILE_NAMES) {
+      yield* fileSystem.remove(path.join(config.stateDir, fileName)).pipe(Effect.ignore);
+    }
+    const tempPrefixes = [SCAN_CACHE_FILE_NAME, ...LEGACY_SCAN_CACHE_FILE_NAMES].map(
+      (fileName) => `${fileName}.`,
+    );
+    const staleBeforeMs = (yield* Clock.currentTimeMillis) - STALE_TEMP_DIRECTORY_MS;
+    for (const name of yield* fileSystem.readDirectory(config.stateDir)) {
+      if (!tempPrefixes.some((prefix) => name.startsWith(prefix))) continue;
+      const tempPath = path.join(config.stateDir, name);
+      yield* fileSystem.stat(tempPath).pipe(
+        Effect.flatMap((info) => {
+          const mtimeMs = Option.getOrUndefined(info.mtime)?.getTime();
+          return info.type === "Directory" && mtimeMs !== undefined && mtimeMs <= staleBeforeMs
+            ? fileSystem.remove(tempPath, { recursive: true })
+            : Effect.void;
+        }),
+        Effect.ignore,
+      );
+    }
+  }).pipe(Effect.ignore);
+
   // Clear dirty before encoding to retain concurrent changes; restore it on failure for retry.
   const persistCaches = Effect.gen(function* () {
     if (cacheDirty) {
@@ -425,6 +452,13 @@ export const make = Effect.gen(function* () {
         writeScanCache(fileCache, { sources: Object.fromEntries(sourceCache) }),
       ).pipe(
         Effect.flatMap((contents) => writeCacheFile(scanCachePath, contents)),
+        Effect.andThen(
+          Effect.suspend(() => {
+            if (supersededFilesRemoved) return Effect.void;
+            supersededFilesRemoved = true;
+            return removeSupersededCacheFiles;
+          }),
+        ),
         Effect.catchCause(() =>
           Effect.sync(() => {
             cacheDirty = true;
@@ -449,9 +483,10 @@ export const make = Effect.gen(function* () {
   /**
    * Reads run concurrently, and the caller stores updates in walk order rather
    * than completion order: saved records of deleted transcripts aggregate in
-   * cache order, where the first copy of a duplicate wins.
+   * cache order, where the first copy of a duplicate wins. Untraced: a scan
+   * reads thousands of files, so scanTranscriptDir records the counts instead.
    */
-  const readFileRecords = Effect.fn("UsageService.readFileRecords")(function* (
+  const readFileRecords = Effect.fnUntraced(function* (
     filePath: string,
     size: number,
     mtimeMs: number,
@@ -555,7 +590,6 @@ export const make = Effect.gen(function* () {
     readonly hostId?: string;
     readonly status?: UsageSource["status"];
     readonly message?: string;
-    readonly action?: UsageSource["action"];
     readonly files:
       | readonly {
           readonly path: string;
@@ -608,6 +642,10 @@ export const make = Effect.gen(function* () {
       return { path, records, malformedRecords };
     });
     const unread = failedPaths + read.filter((file) => file.failed).length;
+    yield* Effect.annotateCurrentSpan({
+      "usage.files": files.length,
+      "usage.files_parsed": read.filter((file) => file.update !== undefined).length,
+    });
     return {
       provider,
       dir,
@@ -736,6 +774,7 @@ export const make = Effect.gen(function* () {
       rates,
       priceOverrides: createOverrideRateTable(settings.usagePriceOverrides),
       modelAliases: resolveModelAliases(settings.usageModelAliases),
+      ...(input.modelFilter === undefined ? {} : { modelFilter: input.modelFilter }),
     });
 
     const sources: UsageSource[] = [];
@@ -815,7 +854,6 @@ export const make = Effect.gen(function* () {
         files,
         status,
         message,
-        action,
         refreshing,
         hostId: sourceHostId,
         instanceIds,
@@ -883,7 +921,6 @@ export const make = Effect.gen(function* () {
                 .filter(Boolean)
                 .join(" ")
             : sourceMessage,
-        ...(action ? { action } : {}),
         ...(refreshing ? { refreshing } : {}),
         ...(instanceIds && instanceIds.length > 0 ? { jInstanceIds: [...instanceIds] } : {}),
       });
@@ -906,6 +943,7 @@ export const make = Effect.gen(function* () {
       sources,
       pricing: pricing(),
       scanDurationMs: Math.max(0, finishedAtMs - startedAtMs),
+      ...(input.modelFilter === undefined ? {} : { modelFilter: input.modelFilter }),
     } satisfies UsageSummary;
   });
 
@@ -921,9 +959,15 @@ export const make = Effect.gen(function* () {
       input.untilTime ?? null,
       settings,
       input.awaitRefresh === true,
+      input.modelFilter ?? null,
     ]);
 
-  const readSummary = Effect.fn("UsageService.readSummary")(function* (input: UsageSummaryInput) {
+  const readSummary = Effect.fn("UsageService.readSummary")(function* (
+    requested: UsageSummaryInput,
+  ) {
+    const { modelFilter: requestedFilter, ...unfiltered } = requested;
+    const modelFilter = canonicalModelFilter(requestedFilter);
+    const input = modelFilter === undefined ? unfiltered : { ...unfiltered, modelFilter };
     const settings = yield* readSettings;
     const key = scanKey(input, settings);
     const deferred = yield* Effect.uninterruptible(

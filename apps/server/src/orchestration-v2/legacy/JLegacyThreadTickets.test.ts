@@ -160,7 +160,7 @@ it.layer(layerTest)("JLegacyThreadTickets", (it) => {
     }),
   );
 
-  it.effect("compaction retires the V1 ticket events with the thread's other V1 events", () =>
+  it.effect("pruning retires the V1 ticket events with the thread's other V1 events", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const importer = yield* LegacyV1ThreadImporter.LegacyV1ThreadImporter;
@@ -175,7 +175,7 @@ it.layer(layerTest)("JLegacyThreadTickets", (it) => {
       );
       yield* importer.reconcileShells;
       yield* importer.ensureTranscript(threadId);
-      yield* maintenance.compactEventStore();
+      yield* maintenance.pruneEventStore();
 
       const remaining = yield* sql<{ readonly count: number }>`
         SELECT COUNT(*) AS count FROM orchestration_events

@@ -39,5 +39,5 @@ export type JCustomUsageLimit = typeof JCustomUsageLimit.Type;
  * a machine, so they cannot count towards a limit.
  */
 export const J_CUSTOM_USAGE_LIMIT_DRIVERS: ReadonlySet<ProviderDriverKind> = new Set(
-  ["claudeAgent", "codex", "grok", "pi"].map((driver) => ProviderDriverKind.make(driver)),
+  ["claudeAgent", "codex", "grok", "muse", "pi"].map((driver) => ProviderDriverKind.make(driver)),
 );
