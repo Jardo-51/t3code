@@ -5,6 +5,12 @@ All notable changes against the [upstream repo](https://github.com/pingdotgg/t3c
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9-jardo.1] - Unreleased
+
+### Changed
+
+- [#18](https://github.com/Jardo-51/t3code/issues/18) Muse Code providers can count towards custom usage limits.
+
 ## [0.1.6-jardo.1] - 2026-11-14
 
 ### Changed
