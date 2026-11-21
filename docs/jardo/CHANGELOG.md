@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.11-jardo.1] - Unreleased
 
+### Changed
+
+- The fork's UI (ticket links, sidebar badge settings, custom usage limits and build info) is translated into every language upstream supports.
+
 ## [0.1.9-jardo.1] - 2026-11-21
 
 ### Changed
