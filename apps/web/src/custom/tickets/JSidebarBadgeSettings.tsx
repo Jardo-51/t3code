@@ -50,7 +50,7 @@ export function JSidebarBadgeSettings() {
         resetAction={
           settings[key] !== DEFAULT_UNIFIED_SETTINGS[key] ? (
             <SettingResetButton
-              label={label}
+              ariaLabel={`Reset ${label} to default`}
               onClick={() => updateSettings({ [key]: DEFAULT_UNIFIED_SETTINGS[key] })}
             />
           ) : null

@@ -36,7 +36,7 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 type Editing = { readonly id: JCustomUsageLimitId; readonly limit: JCustomUsageLimit | null };
@@ -58,6 +58,7 @@ export function JCustomUsageLimitSettings({
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
   const options = useAtomValue(jProviderOptionsAtom);
   const [editing, setEditing] = useState<Editing | null>(null);
+  const searchableSetting = useSearchableSetting();
   if (!supported) return null;
   const names = new Map(options.map((option) => [option.key, option.name]));
   const entries = Object.entries(limits) as Array<[JCustomUsageLimitId, JCustomUsageLimit]>;
