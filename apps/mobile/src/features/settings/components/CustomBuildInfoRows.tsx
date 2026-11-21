@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { T, useGT } from "gt-react-native";
 import { View } from "react-native";
 
 import type { CustomBuildInfo } from "../../../../../../custom/build-info";
@@ -11,16 +12,17 @@ const builtAtFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 export function CustomBuildInfoRows() {
+  const gt = useGT();
   const buildInfo = Constants.expoConfig?.extra?.customBuildInfo as CustomBuildInfo | undefined;
   if (!buildInfo) return null;
 
   const builtAt = new Date(buildInfo.builtAt);
   const refTypeLabel =
     buildInfo.refType === "tag"
-      ? "Tag"
+      ? gt("Tag", { $context: "git tag" })
       : buildInfo.refType === "branch"
-        ? "Branch"
-        : "Detached checkout";
+        ? gt("Branch", { $context: "git branch" })
+        : gt("Detached checkout");
 
   return (
     <>
@@ -33,10 +35,16 @@ export function CustomBuildInfoRows() {
           weight="regular"
         />
         <View className="min-w-0 flex-1 gap-1">
-          <Text className="text-lg text-foreground">Build source</Text>
+          <Text className="text-lg text-foreground">
+            <T>Build source</T>
+          </Text>
           <Text className="text-sm text-foreground-muted">
-            {refTypeLabel} {buildInfo.refName}
-            {buildInfo.dirty ? " with uncommitted changes" : ""}
+            {buildInfo.dirty
+              ? gt("{refType} {ref} with uncommitted changes", {
+                  refType: refTypeLabel,
+                  ref: buildInfo.refName,
+                })
+              : `${refTypeLabel} ${buildInfo.refName}`}
           </Text>
           <Text selectable className="font-t3-mono text-xs text-foreground-muted">
             {buildInfo.commitSha}
@@ -52,7 +60,9 @@ export function CustomBuildInfoRows() {
           weight="regular"
         />
         <View className="min-w-0 flex-1 gap-1">
-          <Text className="text-lg text-foreground">Built</Text>
+          <Text className="text-lg text-foreground">
+            {gt("Built", { $context: "when the app was built" })}
+          </Text>
           <Text selectable className="text-sm text-foreground-muted">
             {Number.isNaN(builtAt.getTime()) ? buildInfo.builtAt : builtAtFormatter.format(builtAt)}
           </Text>

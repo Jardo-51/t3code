@@ -489,15 +489,15 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "j-sidebar-pull-requests",
-    title: "Pull requests in sidebar",
+    title: msg("Pull requests in sidebar"),
     to: "/settings/general",
-    searchTerms: ["pr badge thread row hide narrow"],
+    searchTerms: [msg("pr badge thread row hide narrow")],
   },
   {
     id: "j-sidebar-tickets",
-    title: "Tickets in sidebar",
+    title: msg("Tickets in sidebar"),
     to: "/settings/general",
-    searchTerms: ["ticket jira linear issue badge thread row hide narrow"],
+    searchTerms: [msg("ticket jira linear issue badge thread row hide narrow")],
   },
   {
     id: "boring-sidebar",
@@ -1062,10 +1062,10 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "custom-usage-limits",
-    title: "Custom usage limits",
+    title: msg("Custom usage limits"),
     to: "/settings/providers",
     searchTerms: [
-      "usage limits budget monthly spend dollars USD corporate API endpoint markup cost cap",
+      msg("usage limits budget monthly spend dollars USD corporate API endpoint markup cost cap"),
     ],
     providerSettingsOnly: true,
   },

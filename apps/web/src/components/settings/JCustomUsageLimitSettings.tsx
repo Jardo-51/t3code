@@ -7,6 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { formatUsd } from "@t3tools/shared/usageFormat";
 import { useAtomValue } from "@effect/atom-react";
+import { T, useGT, Var } from "gt-react";
 import { PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 
@@ -59,6 +60,7 @@ export function JCustomUsageLimitSettings({
   const options = useAtomValue(jProviderOptionsAtom);
   const [editing, setEditing] = useState<Editing | null>(null);
   const searchableSetting = useSearchableSetting();
+  const gt = useGT();
   if (!supported) return null;
   const names = new Map(options.map((option) => [option.key, option.name]));
   const entries = Object.entries(limits) as Array<[JCustomUsageLimitId, JCustomUsageLimit]>;
@@ -77,15 +79,17 @@ export function JCustomUsageLimitSettings({
               }
             >
               <PlusIcon className="size-3" aria-hidden />
-              Add limit
+              <T>Add limit</T>
             </Button>
           ) : null
         }
       >
         {entries.length === 0 ? (
           <SettingsRow
-            title="No custom limits."
-            description="Track a monthly spending limit, such as a corporate API budget, on the Limits tab of the Usage page."
+            title={gt("No custom limits.")}
+            description={gt(
+              "Track a monthly spending limit, such as a corporate API budget, on the Limits tab of the Usage page.",
+            )}
           />
         ) : (
           entries.map(([id, limit]) => (
@@ -94,11 +98,13 @@ export function JCustomUsageLimitSettings({
               title={limit.name}
               description={
                 <span>
-                  {formatUsd(limit.limitUsd)} a month
-                  {limit.markupPercent > 0 ? ` · +${limit.markupPercent}% markup` : ""}
+                  {gt("{amount} a month", { amount: formatUsd(limit.limitUsd) })}
+                  {limit.markupPercent > 0
+                    ? ` · ${gt("+{percent}% markup", { percent: limit.markupPercent })}`
+                    : ""}
                   {" · "}
                   {limit.providers.length === 0
-                    ? "No providers"
+                    ? gt("No providers")
                     : limit.providers
                         .map((provider) => names.get(jProviderKey(provider)) ?? provider.instanceId)
                         .join(", ")}
@@ -108,7 +114,7 @@ export function JCustomUsageLimitSettings({
                 !readOnly ? (
                   <div className="flex gap-1">
                     <Button size="xs" variant="ghost" onClick={() => setEditing({ id, limit })}>
-                      Edit
+                      <T>Edit</T>
                     </Button>
                     <RemoveLimitButton
                       name={limit.name}
@@ -156,6 +162,7 @@ function CustomLimitDialog({
   readonly onSave: (limit: JCustomUsageLimit) => void;
 }) {
   const options = useAtomValue(jProviderOptionsAtom);
+  const gt = useGT();
   const formId = useId();
   const [name, setName] = useState(initial?.name ?? "");
   const [limitUsd, setLimitUsd] = useState(initial ? String(initial.limitUsd) : "");
@@ -175,7 +182,7 @@ function CustomLimitDialog({
         key,
         provider,
         name: provider.instanceId,
-        environmentLabel: "Not connected",
+        environmentLabel: gt("Not connected"),
         countable: true,
       })),
   ];
@@ -217,11 +224,13 @@ function CustomLimitDialog({
     <Dialog open onOpenChange={(open) => (open ? undefined : onCancel())}>
       <DialogPopup className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{initial ? "Edit custom limit" : "Add a custom limit"}</DialogTitle>
+          <DialogTitle>{initial ? gt("Edit custom limit") : gt("Add a custom limit")}</DialogTitle>
           <DialogDescription>
-            Counts the priced usage of the chosen providers from 00:00 UTC on the 1st of each month.
-            Saved on {environmentLabel}; providers on other environments count while they are
-            connected.
+            <T>
+              Counts the priced usage of the chosen providers from 00:00 UTC on the 1st of each
+              month. Saved on <Var>{environmentLabel}</Var>; providers on other environments count
+              while they are connected.
+            </T>
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -234,10 +243,12 @@ function CustomLimitDialog({
             }}
           >
             <div className="grid gap-1.5">
-              <Label htmlFor="custom-limit-name">Name</Label>
+              <Label htmlFor="custom-limit-name">
+                <T>Name</T>
+              </Label>
               <Input
                 id="custom-limit-name"
-                placeholder="Corporate API"
+                placeholder={gt("Corporate API")}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 autoFocus
@@ -245,7 +256,9 @@ function CustomLimitDialog({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="custom-limit-amount">Monthly limit (USD)</Label>
+                <Label htmlFor="custom-limit-amount">
+                  <T>Monthly limit (USD)</T>
+                </Label>
                 <Input
                   id="custom-limit-amount"
                   inputMode="decimal"
@@ -255,7 +268,9 @@ function CustomLimitDialog({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="custom-limit-markup">Markup (%)</Label>
+                <Label htmlFor="custom-limit-markup">
+                  <T>Markup (%)</T>
+                </Label>
                 <Input
                   id="custom-limit-markup"
                   inputMode="decimal"
@@ -265,10 +280,12 @@ function CustomLimitDialog({
               </div>
             </div>
             <div className="grid gap-1.5">
-              <span className="text-sm font-medium text-foreground">Providers</span>
+              <span className="text-sm font-medium text-foreground">
+                <T>Providers</T>
+              </span>
               {rows.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  No connected environment has providers whose usage a limit can count.
+                  <T>No connected environment has providers whose usage a limit can count.</T>
                 </p>
               ) : (
                 <div className="divide-y divide-border/60 rounded-lg border border-input bg-muted/25">
@@ -293,7 +310,7 @@ function CustomLimitDialog({
                           </span>
                           {row.countable ? null : (
                             <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                              Not counted
+                              <T>Not counted</T>
                             </span>
                           )}
                         </label>
@@ -307,10 +324,10 @@ function CustomLimitDialog({
         </DialogPanel>
         <DialogFooter variant="bare">
           <Button variant="outline" onClick={onCancel}>
-            Cancel
+            <T>Cancel</T>
           </Button>
           <Button form={formId} type="submit" disabled={!canSave}>
-            {initial ? "Save limit" : "Add limit"}
+            {initial ? gt("Save limit") : gt("Add limit")}
           </Button>
         </DialogFooter>
       </DialogPopup>
@@ -329,18 +346,24 @@ function RemoveLimitButton({
   return (
     <>
       <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>
-        Remove
+        <T>Remove</T>
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {name}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>
+                Remove <Var>{name}</Var>?
+              </T>
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              The limit leaves the Limits view. Usage history is not affected.
+              <T>The limit leaves the Limits view. Usage history is not affected.</T>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              <T>Cancel</T>
+            </AlertDialogClose>
             <Button
               variant="destructive"
               onClick={() => {
@@ -348,7 +371,7 @@ function RemoveLimitButton({
                 onConfirm();
               }}
             >
-              Remove limit
+              <T>Remove limit</T>
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>

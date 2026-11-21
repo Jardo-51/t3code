@@ -7,6 +7,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { useGT } from "gt-react";
 import type { MouseEvent } from "react";
 
 import { useOpenLink } from "~/browser/useOpenLink";
@@ -60,6 +61,7 @@ export function useJThreadTicketMutations() {
 /** Opens a ticket where the "Open links in" setting says; a modified click on a link stays native. */
 export function useOpenTicketLink(threadRef: ScopedThreadRef | null) {
   const openLink = useOpenLink(threadRef);
+  const gt = useGT();
   return (event: MouseEvent<HTMLElement>, url: string) => {
     if (event.button > 1) return;
     event.stopPropagation();
@@ -70,8 +72,8 @@ export function useOpenTicketLink(threadRef: ScopedThreadRef | null) {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to open ticket link",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: gt("Unable to open ticket link"),
+          description: error instanceof Error ? error.message : gt("An error occurred."),
         }),
       );
     });

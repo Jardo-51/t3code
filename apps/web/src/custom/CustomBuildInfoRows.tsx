@@ -1,3 +1,5 @@
+import { T, useGT, Var } from "gt-react";
+
 import { SettingsRow } from "../components/settings/settingsLayout";
 
 interface CustomBuildInfo {
@@ -18,30 +20,39 @@ const builtAtFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 export function CustomBuildInfoRows() {
+  const gt = useGT();
   const builtAt = new Date(buildInfo.builtAt);
   const refTypeLabel =
     buildInfo.refType === "tag"
-      ? "Tag"
+      ? gt("Tag", { $context: "git tag" })
       : buildInfo.refType === "branch"
-        ? "Branch"
-        : "Detached checkout";
+        ? gt("Branch", { $context: "git branch" })
+        : gt("Detached checkout");
+  const ref = <code className="text-foreground/80">{buildInfo.refName}</code>;
 
   return (
     <>
       <SettingsRow
-        title="Build source"
+        title={gt("Build source")}
         description={
           <span className="flex flex-col gap-0.5">
             <span>
-              {refTypeLabel} <code className="text-foreground/80">{buildInfo.refName}</code>
-              {buildInfo.dirty ? " with uncommitted changes" : ""}
+              {buildInfo.dirty ? (
+                <T>
+                  <Var>{refTypeLabel}</Var> <Var>{ref}</Var> with uncommitted changes
+                </T>
+              ) : (
+                <>
+                  {refTypeLabel} {ref}
+                </>
+              )}
             </span>
             <code className="break-all text-2xs text-foreground/80">{buildInfo.commitSha}</code>
           </span>
         }
       />
       <SettingsRow
-        title="Built"
+        title={gt("Built", { $context: "when the app was built" })}
         description={
           <time dateTime={buildInfo.builtAt}>
             {Number.isNaN(builtAt.getTime())

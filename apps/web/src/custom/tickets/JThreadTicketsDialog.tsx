@@ -3,6 +3,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { parseTicketUrl, ticketKeyFromUrl } from "@t3tools/shared/jThreadTickets";
 import { Atom } from "effect/reactivity";
+import { T, useGT } from "gt-react";
 import { XIcon } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
@@ -63,6 +64,7 @@ function JThreadTicketsDialog({
   const tickets = useThreadShell(threadRef)?.jTickets ?? [];
   const mutations = useJThreadTicketMutations();
   const openTicket = useOpenTicketLink(threadRef);
+  const gt = useGT();
   const urlInputRef = useRef<HTMLInputElement>(null);
   const [urlInput, setUrlInput] = useState("");
   const [keyInput, setKeyInput] = useState("");
@@ -82,9 +84,9 @@ function JThreadTicketsDialog({
   const validation = !dirty
     ? null
     : url === null
-      ? "Paste the ticket's http(s) URL."
+      ? gt("Paste the ticket's http(s) URL.")
       : key === null
-        ? "Enter the ticket ID; it cannot be read from this URL."
+        ? gt("Enter the ticket ID; it cannot be read from this URL.")
         : null;
 
   const submit = async () => {
@@ -95,7 +97,7 @@ function JThreadTicketsDialog({
     const result = await settlePromise(() => mutations.link(threadRef, url, key));
     setPending(false);
     if (result._tag === "Failure") {
-      setError(errorMessage(result, "Could not link the ticket."));
+      setError(errorMessage(result, gt("Could not link the ticket.")));
       return;
     }
     if (tickets.length > 0) {
@@ -112,7 +114,8 @@ function JThreadTicketsDialog({
     setPending(true);
     const result = await settlePromise(() => mutations.unlink(threadRef, ticketUrl));
     setPending(false);
-    if (result._tag === "Failure") setError(errorMessage(result, "Could not unlink the ticket."));
+    if (result._tag === "Failure")
+      setError(errorMessage(result, gt("Could not unlink the ticket.")));
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -125,9 +128,9 @@ function JThreadTicketsDialog({
     <Dialog open onOpenChange={(open) => (!open && !pending ? onClose() : undefined)}>
       <DialogPopup className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{tickets.length > 0 ? "Thread tickets" : "Link ticket"}</DialogTitle>
+          <DialogTitle>{tickets.length > 0 ? gt("Thread tickets") : gt("Link ticket")}</DialogTitle>
           <DialogDescription>
-            Link an issue-tracker ticket by its URL. T3 Code never contacts the tracker.
+            <T>Link an issue-tracker ticket by its URL. T3 Code never contacts the tracker.</T>
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -151,7 +154,7 @@ function JThreadTicketsDialog({
                     type="button"
                     variant="ghost-destructive"
                     size="icon-xs"
-                    aria-label={`Unlink ${ticket.key}`}
+                    aria-label={gt("Unlink {key}", { key: ticket.key })}
                     disabled={pending}
                     onClick={() => void unlink(ticket.url)}
                   >
@@ -164,7 +167,7 @@ function JThreadTicketsDialog({
           <Input
             ref={urlInputRef}
             placeholder="https://acme.atlassian.net/browse/PROJ-123"
-            aria-label="Ticket URL"
+            aria-label={gt("Ticket URL")}
             value={urlInput}
             onChange={(event) => {
               setDirty(true);
@@ -174,8 +177,8 @@ function JThreadTicketsDialog({
           />
           {url !== null && parsedKey === null ? (
             <Input
-              placeholder="Ticket ID, such as PROJ-123"
-              aria-label="Ticket ID"
+              placeholder={gt("Ticket ID, such as {example}", { example: "PROJ-123" })}
+              aria-label={gt("Ticket ID")}
               value={keyInput}
               onChange={(event) => setKeyInput(event.target.value)}
               onKeyDown={onKeyDown}
@@ -190,7 +193,7 @@ function JThreadTicketsDialog({
         </DialogPanel>
         <DialogFooter>
           <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={pending}>
-            {tickets.length > 0 ? "Done" : "Cancel"}
+            {tickets.length > 0 ? gt("Done") : gt("Cancel")}
           </Button>
           <Button
             type="button"
@@ -198,7 +201,7 @@ function JThreadTicketsDialog({
             onClick={() => void submit()}
             disabled={pending || url === null || key === null}
           >
-            {pending ? "Saving..." : "Link"}
+            {pending ? gt("Saving...") : gt("Link", { $context: "verb, links a ticket" })}
           </Button>
         </DialogFooter>
       </DialogPopup>

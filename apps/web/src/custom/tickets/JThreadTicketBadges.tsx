@@ -1,5 +1,6 @@
 import type { EnvironmentId, JThreadTicket, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { useGT } from "gt-react";
 import { TicketIcon } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -21,6 +22,7 @@ export function JComposerTicketBadges({
   readonly tickets: ReadonlyArray<JThreadTicket> | undefined;
 }) {
   const openTicket = useOpenTicketLink(threadRef);
+  const gt = useGT();
   if (tickets === undefined || tickets.length === 0) return null;
   return tickets.map((ticket) => (
     <Tooltip key={ticket.url}>
@@ -29,7 +31,7 @@ export function JComposerTicketBadges({
           <ComposerControl
             size="xs"
             render={<a href={ticket.url} target="_blank" rel="noopener noreferrer" />}
-            aria-label={`Ticket ${ticket.key}`}
+            aria-label={gt("Ticket {key}", { key: ticket.key })}
             onPointerDown={stopPointer}
             onClick={(event: MouseEvent<HTMLElement>) => openTicket(event, ticket.url)}
             onContextMenu={(event: MouseEvent<HTMLElement>) => {
@@ -95,6 +97,7 @@ function TicketBadge({
 }) {
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const openTicket = useOpenTicketLink(threadRef);
+  const gt = useGT();
   const first = tickets[0]!;
   return (
     <Tooltip>
@@ -102,7 +105,7 @@ function TicketBadge({
         render={
           <InlineButton
             render={<a href={first.url} target="_blank" rel="noopener noreferrer" />}
-            aria-label={`Ticket ${first.key}`}
+            aria-label={gt("Ticket {key}", { key: first.key })}
             onPointerDown={stopPointer}
             onClick={(event: MouseEvent<HTMLElement>) => openTicket(event, first.url)}
           />

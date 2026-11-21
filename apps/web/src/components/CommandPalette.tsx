@@ -1552,6 +1552,7 @@ function OpenCommandPaletteDialog(props: {
   const ticketsAction = jThreadTicketsPaletteAction(
     activeThread,
     activeThreadServerConfig?.environment.capabilities,
+    messages,
   );
   if (ticketsAction !== null) actionItems.push(ticketsAction);
 

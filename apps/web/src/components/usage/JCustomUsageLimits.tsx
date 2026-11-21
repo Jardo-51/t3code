@@ -6,6 +6,7 @@ import {
 } from "@t3tools/shared/jCustomUsageLimits";
 import { formatCount, formatUsd } from "@t3tools/shared/usageFormat";
 import { paceOf } from "@t3tools/shared/usageLimits";
+import { T, useGT, useLocale, useMessages } from "gt-react";
 import { WalletIcon } from "lucide-react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
@@ -67,7 +68,7 @@ function JCustomUsageLimitCards({
         <span className="flex size-5 items-center justify-center">
           <WalletIcon className="size-4 text-foreground/80" aria-hidden />
         </span>
-        Custom limits
+        <T>Custom limits</T>
       </h2>
       {limits.map((entry) => (
         <JCustomUsageLimitCard
@@ -97,6 +98,9 @@ function JCustomUsageLimitCard({
   readonly now: number;
 }) {
   const timestampFormat = usePrimarySettings((settings) => settings.timestampFormat);
+  const gt = useGT();
+  const locale = useLocale();
+  const messages = useMessages();
   const { limit } = entry;
   const pace = paceOf(spend.window, now);
   // Until a provider reports, a $0.00 total and its pace would read as nothing spent.
@@ -109,7 +113,8 @@ function JCustomUsageLimitCard({
   const providerName = (key: string, fallback: string) => providers.get(key)?.name ?? fallback;
   // Only used mid-sentence, so the fallback starts lowercase.
   const environmentLabel = (environmentId: EnvironmentId) =>
-    statuses.get(environmentId)?.label ?? "an environment that is not connected";
+    statuses.get(environmentId)?.label ??
+    gt("an environment that is not connected", { $context: "used mid-sentence" });
 
   // Keyed by what they are about: two unknown environments share a label, so texts can repeat.
   const notices: { readonly key: string; readonly text: string }[] = [];
@@ -117,14 +122,20 @@ function JCustomUsageLimitCard({
     notices.push({
       key: `missing:${environmentId}`,
       text: statuses.get(environmentId)?.isPending
-        ? `Waiting for ${environmentLabel(environmentId)} to report usage.`
-        : `Spend from ${environmentLabel(environmentId)} is missing, as it is not reporting usage.`,
+        ? gt("Waiting for {environment} to report usage.", {
+            environment: environmentLabel(environmentId),
+          })
+        : gt("Spend from {environment} is missing, as it is not reporting usage.", {
+            environment: environmentLabel(environmentId),
+          }),
     });
   }
   for (const environmentId of spend.untrackedEnvironmentIds) {
     notices.push({
       key: `untracked:${environmentId}`,
-      text: `Usage isn't tracked per provider on ${environmentLabel(environmentId)}, so its spend is missing.`,
+      text: gt("Usage isn't tracked per provider on {environment}, so its spend is missing.", {
+        environment: environmentLabel(environmentId),
+      }),
     });
   }
   const sharedGroups = new Set<string>();
@@ -141,11 +152,18 @@ function JCustomUsageLimitCard({
     );
     const names = group.map((member) => {
       const name = providerName(jProviderKey(member), member.instanceId);
-      return acrossEnvironments ? `${name} on ${environmentLabel(member.environmentId)}` : name;
+      return acrossEnvironments
+        ? gt("{provider} on {environment}", {
+            provider: name,
+            environment: environmentLabel(member.environmentId),
+          })
+        : name;
     });
     notices.push({
       key: `chosen:${groupKey}`,
-      text: `${new Intl.ListFormat("en").format(names)} read one history, so it counts once towards the total.`,
+      text: gt("{providers} read one history, so it counts once towards the total.", {
+        providers: new Intl.ListFormat(locale).format(names),
+      }),
     });
   }
   for (const { provider, spentUsd, hasHistory, sharedWith } of spend.providers) {
@@ -154,7 +172,10 @@ function JCustomUsageLimitCard({
     if (spentUsd !== null && !hasHistory) {
       notices.push({
         key: `history:${key}`,
-        text: `${name} has no usage this limit can count on ${environmentLabel(provider.environmentId)}.`,
+        text: gt("{provider} has no usage this limit can count on {environment}.", {
+          provider: name,
+          environment: environmentLabel(provider.environmentId),
+        }),
       });
     }
     if (sharedWith.length > 0) {
@@ -168,14 +189,20 @@ function JCustomUsageLimitCard({
         .join(", ");
       notices.push({
         key: `shared:${key}`,
-        text: `${name} shares its history with ${others}, so their usage counts too.`,
+        text: gt("{provider} shares its history with {others}, so their usage counts too.", {
+          provider: name,
+          others,
+        }),
       });
     }
   }
   if (spend.unpricedRecords > 0) {
     notices.push({
       key: "unpriced",
-      text: `${formatCount(spend.unpricedRecords)} request(s) used models without a known price and are not counted.`,
+      text: gt(
+        "{count, plural, one {{formatted} request used a model without a known price and is not counted.} other {{formatted} requests used models without a known price and are not counted.}}",
+        { count: spend.unpricedRecords, formatted: formatCount(spend.unpricedRecords) },
+      ),
     });
   }
 
@@ -188,7 +215,7 @@ function JCustomUsageLimitCard({
             {reported ? formatUsd(spend.spentUsd) : "-"}
           </span>
           <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <span>of {formatUsd(limit.limitUsd)}</span>
+            <span>{gt("of {amount}", { amount: formatUsd(limit.limitUsd) })}</span>
             {reported && pace ? <PaceIcon pace={pace} /> : null}
           </span>
         </span>
@@ -196,9 +223,19 @@ function JCustomUsageLimitCard({
       <WindowBar color={color} window={spend.window} now={now} />
       <div className="flex flex-col gap-1 text-xs text-muted-foreground md:col-span-2">
         <span>
-          {limit.markupPercent > 0 ? `Includes +${limit.markupPercent}% markup · ` : ""}
-          Resets {formatUpcomingTimestamp(spend.window.resetsAt ?? "", timestampFormat, now)} ·
-          Saved on {entry.environmentLabel}
+          {limit.markupPercent > 0
+            ? `${gt("Includes +{percent}% markup", { percent: limit.markupPercent })} · `
+            : ""}
+          {gt("Resets {time}", {
+            time: formatUpcomingTimestamp(
+              spend.window.resetsAt ?? "",
+              timestampFormat,
+              now,
+              undefined,
+              messages,
+            ),
+          })}{" "}
+          · {gt("Saved on {environment}", { environment: entry.environmentLabel })}
         </span>
         <span className="flex flex-wrap gap-x-4 gap-y-0.5">
           {spend.providers.map(({ provider, spentUsd }) => {
@@ -206,7 +243,7 @@ function JCustomUsageLimitCard({
             return (
               <span key={key} className="tabular-nums">
                 {providerName(key, provider.instanceId)} ·{" "}
-                {statuses.get(provider.environmentId)?.label ?? "Not connected"}{" "}
+                {statuses.get(provider.environmentId)?.label ?? gt("Not connected")}{" "}
                 <span className="text-foreground">
                   {spentUsd === null ? "-" : formatUsd(spentUsd)}
                 </span>
