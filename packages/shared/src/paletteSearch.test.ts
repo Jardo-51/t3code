@@ -488,6 +488,7 @@ describe("scoreThreadSearch with heavy use and loose input", () => {
       expect(scoreThreadSearch(foldSearchQuery(query), subject, NOW), query).not.toBeNull();
     }
     expect(scoreThreadSearch(foldSearchQuery("proj-123"), subject, NOW)?.explain?.()).toEqual({
+      field: "ticket",
       label: "Ticket",
       text: "PROJ-123",
       ranges: [{ start: 0, end: 8 }],
