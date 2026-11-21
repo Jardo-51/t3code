@@ -2772,6 +2772,8 @@ describe("UsageService", () => {
       assert.deepStrictEqual(
         instancesByDir,
         new Map([
+          // The default instance also keeps the default home's history.
+          [".claude", "claudeAgent"],
           ["claude", "claudeAgent,claude-shared"],
           ["claude-work", "claude-work"],
         ]),
