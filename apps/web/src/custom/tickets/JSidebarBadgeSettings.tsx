@@ -1,7 +1,7 @@
 import { type ClientSettings, DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts";
 
 import { SettingResetButton, SettingsRow } from "~/components/settings/settingsLayout";
-import { searchableSetting } from "~/components/settings/settingsSearch";
+import { useSearchableSetting } from "~/components/settings/settingsSearch";
 import {
   useScopedSettings,
   useUpdateScopedSettings,
@@ -39,6 +39,7 @@ export const J_SIDEBAR_BADGE_DEFAULTS: BadgeSettings = {
 export function JSidebarBadgeSettings() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
+  const searchableSetting = useSearchableSetting();
   return BADGE_SETTINGS.map(({ key, searchId, label, description }) => {
     const searchable = searchableSetting(searchId);
     return (
