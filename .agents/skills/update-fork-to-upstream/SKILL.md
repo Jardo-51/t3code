@@ -1,6 +1,6 @@
 ---
 name: update-fork-to-upstream
-description: Update this fork to a specific upstream (pingdotgg/t3code) release, following docs/jardo/forking-strategy.md. Takes the upstream tag as its argument (e.g. v0.1.12). Releases the current fork version (dates its CHANGELOG entry, tags custom/main), fast-forwards main to the upstream tag and pushes it, merges main into custom/main resolving conflicts, verifies the web build, opens a new Unreleased CHANGELOG entry, and pushes custom/main. Use when the user asks to update / sync / bump the fork to an upstream version or tag.
+description: Update this fork to a specific upstream (pingdotgg/t3code) release, following docs/jardo/forking-strategy.md. Takes the upstream tag as its argument (e.g. v0.1.12). Releases the current fork version (dates its CHANGELOG entry, tags custom/main), fast-forwards main to the upstream tag and pushes it, merges main into custom/main resolving conflicts, verifies the fork's code (build, typecheck, fork tests, lint, translations), opens a new Unreleased CHANGELOG entry, and pushes custom/main. Use when the user asks to update / sync / bump the fork to an upstream version or tag.
 ---
 
 # Update the fork to an upstream release
@@ -96,13 +96,24 @@ without asking, using these rules:
   identify it) that upstream has now merged in its own form: take upstream's whole file
   (`git checkout --theirs <path> && git add <path>`), then re-apply any unrelated custom edits in that
   file as a separate commit after the merge.
+- **Translation catalogs** (`apps/{web,mobile,desktop}/src/i18n/translations/*.json`): take
+  upstream's (`git checkout --theirs <path> && git add <path>`). Step 5 regenerates them and puts
+  the fork's translations back.
 - **Custom features** (`git log --oneline --no-merges main..custom/main` lists them): keep both
   upstream's change and the fork's behaviour, adapting the custom code to upstream's new shape. Read
   both sides (`git diff --merge <path>`, `git log main -- <path>`) before editing.
 
 Search for leftover markers before committing: `git diff --check` and
-`git grep -nE '^(<<<<<<<|>>>>>>>)' -- ':!*.md'`. Then `git commit --no-edit`, keeping the default
-`Merge branch 'main' into custom/main` subject.
+`git grep -nE '^(<<<<<<<|>>>>>>>)' -- ':!*.md' ':!patches/**'` (upstream's own patch files may
+carry trailing whitespace). Then commit, keeping the default `Merge branch 'main' into custom/main`
+subject:
+
+```bash
+git commit --no-edit --no-verify
+```
+
+`--no-verify` is deliberate here: the pre-commit hook would lint every file the whole upstream range
+touched. Step 5 verifies the result instead, and its fixup commits run the hook normally.
 
 Stop and ask only when a conflict cannot be resolved without dropping or redesigning a custom
 feature, for example when upstream deleted or rewrote the code a feature depends on. Describe what
@@ -113,19 +124,99 @@ After the merge, check for **semantic duplication**: a registration, switch arm,
 migration now present twice because upstream added one next to a custom one. Grep for the
 identifiers of adopted PRs and custom features the merge touched.
 
-## 5. Verify the build
+Also look for **overlapping features**: upstream shipping its own version of something a custom
+feature does (for example upstream issue linking next to the fork's ticket links). Keep both, and
+name each overlap in the report so the user can decide whether to retire the fork's version.
 
-Install if the lockfile or any `package.json` changed, then build the web app:
+## 5. Verify
+
+Most breakage shows up in fork files that merged cleanly but use an upstream API that changed, so
+check every fork file, not only the ones that conflicted. The fork's files are:
 
 ```bash
-vp i
-cd apps/web && vp build
+git diff --name-only --diff-filter=AM main custom/main
 ```
 
-If it fails, fix the cause in separate commits on `custom/main` after the merge commit, and rebuild
-until it passes. Also typecheck the packages the conflict resolution touched
-(`vp run --filter <package> typecheck`) and run the tests beside the files you edited
-(`vp test run <files>`). Do not run repo-wide checks.
+Fix each failure in its own commit on `custom/main` after the merge commit, and repeat the failing
+check until it passes. Do not run repo-wide checks.
+
+1. **Install** if the lockfile or any `package.json` changed: `vp i`. Running this skill is the
+   user's approval for that install. If pnpm aborts with
+   `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`, rerun it as
+   `vp i -- --config.confirmModulesPurge=false`. After an install that changed dependencies, clear
+   `apps/web/node_modules/.vite/deps`.
+2. **Build** the web app: `cd apps/web && vp build`.
+3. **Typecheck** every package that contains fork code (the server package is named `t3`):
+
+   ```bash
+   for dir in $(git diff --name-only main custom/main -- apps packages | cut -d/ -f1-2 | sort -u); do
+     node -p "require('./$dir/package.json').name"
+   done
+   vp run --filter <name> [--filter <name> ...] --concurrency-limit 1 typecheck
+   ```
+
+4. **Test** the fork's own tests: the `*.test.ts(x)` files in the fork file list, run with
+   `vp test run <files>` from their package. Browser tests (`*.browser.test.*`) need Playwright; run
+   them where it is available, otherwise list them as not run in the report. A fork test that fails
+   because upstream changed the behaviour it relied on gets its expectation updated, not the code
+   reverted.
+5. **Lint and format** the fork's `.ts`/`.tsx` files: `vp lint <files>` and `vp fmt --check <files>`.
+   This catches new upstream lint rules that fork code now breaks.
+6. **Translations**: run `vp run i18n:check`. If it fails, or step 4 took upstream's catalogs:
+   1. Run `vp run i18n:generate` in `apps/web` and `apps/mobile` (and `apps/desktop` if the fork
+      list includes its translations). New keys get English values in every locale.
+   2. Restore the fork's translations from the pre-merge SHA noted in step 4. This script copies
+      every fork-only key's value back and lists keys that are new since then:
+
+      ```bash
+      PRE_MERGE=<pre-merge SHA> node --input-type=module - <<'EOF'
+      import { execFileSync } from "node:child_process";
+      import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+      // Catalogs exceed execFileSync's default 1 MiB buffer.
+      const show = (ref, file) => {
+        try {
+          const options = { encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "ignore"] };
+          return JSON.parse(execFileSync("git", ["show", `${ref}:${file}`], options));
+        } catch {
+          return null;
+        }
+      };
+      const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+      for (const app of ["web", "mobile", "desktop"]) {
+        const dir = `apps/${app}/src/i18n/translations`;
+        const en = JSON.parse(readFileSync(`${dir}/en.json`, "utf8"));
+        for (const name of readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "en.json")) {
+          const file = `${dir}/${name}`;
+          const catalog = JSON.parse(readFileSync(file, "utf8"));
+          const fork = show(process.env.PRE_MERGE, file) ?? {};
+          const upstream = show("main", file) ?? {};
+          let restored = 0;
+          const untranslated = [];
+          for (const key of Object.keys(catalog)) {
+            if (Object.hasOwn(upstream, key)) continue;
+            if (!Object.hasOwn(fork, key)) {
+              untranslated.push(`${key} ${JSON.stringify(en[key])}`);
+              continue;
+            }
+            if (!same(catalog[key], fork[key])) restored += 1;
+            catalog[key] = fork[key];
+          }
+          writeFileSync(file, `${JSON.stringify(catalog, null, 2)}\n`);
+          if (restored > 0 || untranslated.length > 0) console.log(`${file}: restored ${restored}`);
+          for (const entry of untranslated) console.log(`  new, translate: ${entry}`);
+        }
+      }
+      EOF
+      ```
+
+   3. Translate every key it lists as new in each locale catalog, using the terms that catalog
+      already uses for the same concepts. Then `vp fmt` the catalogs and rerun `vp run i18n:check`.
+
+   Any string a fixup adds follows [Translating the UI](../../../docs/internals/i18n.md) and gets
+   translated the same way.
+
+If a check cannot run in the current environment, say which one and why in the report instead of
+skipping it silently.
 
 ## 6. Open the next version
 
@@ -135,8 +226,11 @@ Add a new entry above `## [<CURRENT>] - <date>` in `docs/jardo/CHANGELOG.md`:
 ## [<NEXT>] - Unreleased
 ```
 
-If the merge changed or removed a custom feature, record it in that entry under `### Changed` or
-`### Removed` in the file's existing style. Otherwise leave the entry empty.
+If the merge or a step 5 fixup changed what a custom feature does or how it looks to the user
+(including adapting it to new upstream behaviour, such as translating its UI), record it in that
+entry under `### Changed`, or under `### Removed` if a feature went away, in the file's existing
+style. Purely internal adaptations (renamed imports, new API shapes with the same behaviour) are not
+recorded. Otherwise leave the entry empty.
 
 ```bash
 git add docs/jardo/CHANGELOG.md
@@ -150,4 +244,5 @@ git push origin custom/main "<tag from step 2>"
 ```
 
 Report to the user: the release tag, the old and new upstream base, each conflict and how it was
-resolved, any fixup commits, and the build and test results.
+resolved, any fixup commits, the result of each step 5 check (and any that could not run), and the
+overlapping upstream features from step 4.
