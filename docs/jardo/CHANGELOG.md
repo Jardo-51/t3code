@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The fork's UI (ticket links, sidebar badge settings, custom usage limits and build info) is translated into every language upstream supports.
 
+### Fixed
+
+- [#21](https://github.com/Jardo-51/t3code/pull/21) A click outside the scheduled task editor no longer discards the draft (promoted to upstream PR [#40708](https://github.com/pingdotgg/t3code/pull/40708)).
+
 ## [0.1.9-jardo.1] - 2026-11-21
 
 ### Changed
