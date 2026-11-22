@@ -4,6 +4,7 @@
 > - [CHANGELOG.md](docs/jardo/CHANGELOG.md) tracks the changes in this fork against upstream
 > - [README.md](docs/jardo/README.md) contains the fork usage info (building, running, etc.)
 > - [wishlist.md](docs/jardo/wishlist.md) tracks the changes I would like to have (either implemened in upstream or this fork)
+> - [PRs filed to upstream](https://github.com/pingdotgg/t3code/pulls?q=is%3Apr+author%3AJardo-51)
 
 <p align="center">
   <a href="https://t3.codes">
